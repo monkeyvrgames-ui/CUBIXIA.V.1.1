@@ -1267,6 +1267,9 @@ function publicMailError(error) {
   if (/Invalid login|Username and Password not accepted|535|EAUTH/i.test(message)) {
     return "Gmail rejected the sender login. Make sure GMAIL_USER is the same Google account that created the App Password, then redeploy.";
   }
+  if (/timed out|timeout|ETIMEDOUT|ESOCKET/i.test(message)) {
+    return "Gmail is taking too long to answer. CUBIXIA will keep trying in the background; wait a moment and check your inbox/spam.";
+  }
   if (/less secure|application-specific password|app password/i.test(message)) {
     return "Gmail requires a valid Google App Password for this sender account.";
   }
@@ -1433,8 +1436,28 @@ async function sendTwoStepEmail(user, code) {
     to: user.email,
     subject: "Your CUBIXIA 2-step verification code",
     text: `Your CUBIXIA login security code is ${code}. It expires in 10 minutes. If you did not try to log in, change your password immediately.`
-  }), 15000, "Gmail 2-step email");
+  }), 60000, "Gmail 2-step email");
   return true;
+}
+
+function sendTwoStepEmailInBackground(users, user, code) {
+  sendTwoStepEmail(user, code)
+    .then(async () => {
+      user.twoStep.lastEmailSent = true;
+      user.twoStep.lastEmailStatus = "sent";
+      user.twoStep.lastEmailError = "";
+      user.twoStep.lastEmailErrorAt = 0;
+      await writeUsers(users);
+    })
+    .catch(async (error) => {
+      const emailError = publicMailError(error);
+      console.error("CUBIXIA 2-step email failed:", emailError);
+      user.twoStep.lastEmailSent = false;
+      user.twoStep.lastEmailStatus = "failed";
+      user.twoStep.lastEmailError = emailError;
+      user.twoStep.lastEmailErrorAt = Date.now();
+      await writeUsers(users);
+    });
 }
 
 async function prepareTwoStepChallenge(req, users, user, options = {}) {
@@ -1444,18 +1467,22 @@ async function prepareTwoStepChallenge(req, users, user, options = {}) {
     && existing.codeHash
     && Number(existing.codeExpires || 0) > now
     && Number(existing.lastSentAt || 0) > now - 10 * 60 * 1000
-    && existing.lastEmailSent === true;
+    && (existing.lastEmailSent === true || existing.lastEmailStatus === "sending");
   if (canReuse) {
     req.session.pendingTwoStepUserId = user.id;
     req.session.pendingTwoStepCreatedAt = Number(existing.requestedAt || now);
     delete req.session.userId;
+    const sending = existing.lastEmailStatus === "sending";
     return {
       twoStepRequired: true,
       maskedEmail: maskEmailAddress(user.email),
       expiresAt: existing.codeExpires,
-      emailSent: true,
+      emailSent: !sending,
+      emailSending: sending,
       reused: true,
-      message: `A 2-step verification code was already sent to ${maskEmailAddress(user.email)}. Use that same code.`
+      message: sending
+        ? `CUBIXIA is sending your 2-step verification code to ${maskEmailAddress(user.email)}. Wait a moment, then check Gmail and spam.`
+        : `A 2-step verification code was already sent to ${maskEmailAddress(user.email)}. Use that same code.`
     };
   }
   if (!options.forceNew && twoStepChallengeLocks.has(user.id)) {
@@ -1467,9 +1494,9 @@ async function prepareTwoStepChallenge(req, users, user, options = {}) {
     return {
       ...publicChallenge,
       reused: true,
-      message: publicChallenge.emailSent
+      message: publicChallenge.emailSent || publicChallenge.emailSending
         ? `A 2-step verification code was already sent to ${maskEmailAddress(user.email)}. Use that same code.`
-        : "CUBIXIA could not send the 2-step email yet. Check the Gmail environment variables on Render, then press Resend Code."
+        : (publicChallenge.message || "CUBIXIA could not send the 2-step email yet. Check the Gmail environment variables on Render, then press Resend Code.")
     };
   }
   const challengePromise = (async () => {
@@ -1483,28 +1510,20 @@ async function prepareTwoStepChallenge(req, users, user, options = {}) {
       attempts: 0,
       requestedAt,
       lastSentAt: requestedAt,
-      lastEmailSent: false
+      lastEmailSent: false,
+      lastEmailStatus: "sending",
+      lastEmailError: ""
     };
     await writeUsers(users);
-    let emailError = "";
-    const emailSent = await sendTwoStepEmail(user, code).catch((error) => {
-      emailError = publicMailError(error);
-      console.error("CUBIXIA 2-step email failed:", emailError);
-      return false;
-    });
-    user.twoStep.lastEmailSent = Boolean(emailSent);
-    user.twoStep.lastEmailErrorAt = emailSent ? 0 : Date.now();
-    user.twoStep.lastEmailError = emailSent ? "" : emailError;
-    await writeUsers(users);
+    sendTwoStepEmailInBackground(users, user, code);
     return {
       requestedAt,
       twoStepRequired: true,
       maskedEmail: maskEmailAddress(user.email),
       expiresAt: user.twoStep.codeExpires,
-      emailSent,
-      message: emailSent
-        ? `A 2-step verification code was sent to ${maskEmailAddress(user.email)}.`
-        : `CUBIXIA could not send the 2-step email. ${emailError || `Render Gmail status: GMAIL_USER ${gmailStatus().userSet ? "loaded" : "missing"}, GMAIL_APP_PASSWORD ${gmailStatus().passwordSet ? "loaded" : "missing"}.`}`
+      emailSent: false,
+      emailSending: true,
+      message: `CUBIXIA is sending your 2-step verification code to ${maskEmailAddress(user.email)}. Wait a moment, then check Gmail and spam.`
     };
   })();
   if (!options.forceNew) twoStepChallengeLocks.set(user.id, challengePromise);
@@ -2083,7 +2102,7 @@ app.get("/health", (_req, res) => {
   res.json({
     ok: true,
     app: "CUBIXIA",
-    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.1.1",
+    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.1.2",
     mode: process.env.CUBIXIA_DESKTOP ? "desktop-local-server" : "shared-server",
     gmailReady: gmail.ready,
     gmailUserSet: gmail.userSet,
@@ -2098,7 +2117,7 @@ app.get("/health/email", async (_req, res) => {
   res.json({
     ok: true,
     app: "CUBIXIA",
-    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.1.1",
+    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.1.2",
     gmailReady: gmail.ready,
     gmailUserSet: gmail.userSet,
     gmailPasswordSet: gmail.passwordSet,

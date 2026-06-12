@@ -1941,27 +1941,27 @@
         "createdAt": "2026-06-10T00:59:07.424Z"
       }
     ],
-    "lastOnline": "2026-06-10T23:36:04.212Z",
+    "lastOnline": "2026-06-12T01:57:29.403Z",
     "currentGame": "",
     "banned": false,
     "banReason": "",
     "worldState": {
       "gameId": "coaster-tycoon",
-      "x": -50.35068663004607,
+      "x": 0,
       "y": 0.8,
-      "z": -6.830050403720934,
-      "rot": 1.4975661767396922,
+      "z": 5.5,
+      "rot": 0,
       "vx": 0,
       "vy": 0,
       "vz": 0,
       "moving": false,
       "jumping": false,
       "hp": 100,
-      "cash": 617,
+      "cash": 200,
       "scale": 1,
       "fly": false,
       "noclip": false,
-      "updatedAt": 1781133697925
+      "updatedAt": 1781229438531
     },
     "passwordResetCode": "",
     "passwordResetExpires": 0,
@@ -1970,7 +1970,7 @@
       "title": "Cubixia Coaster Tycoon",
       "progress": "Left server",
       "xp": 140,
-      "currency": 617
+      "currency": 200
     },
     "timeoutUntil": 0,
     "timeoutReason": "",
@@ -2053,7 +2053,7 @@
           "id": "97486e8c-f260-4b53-8f6a-5c5ff5bdd0e8",
           "tokenHash": "5b80c69fe3db6deb6c54fe914b74051846e150fa7349f351d13aebf3e47001f2",
           "createdAt": "2026-06-10T07:16:27.602Z",
-          "lastUsedAt": "2026-06-10T23:19:12.762Z",
+          "lastUsedAt": "2026-06-12T01:57:14.362Z",
           "expiresAt": 1783667787602,
           "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"
         },
@@ -2095,7 +2095,7 @@
     },
     "progression": {
       "level": 1,
-      "xp": 37,
+      "xp": 45,
       "lastDailyAt": 1781053125889,
       "streak": 1,
       "stats": {
