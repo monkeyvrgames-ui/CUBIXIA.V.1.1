@@ -1,0 +1,47 @@
+CUBIXIA custom worldwide server setup
+
+Render is no longer required.
+
+CUBIXIA only needs one public shared server URL. That server can be a VPS,
+a Node hosting provider, a Cloudflare Tunnel/ngrok tunnel to your computer,
+or any service that can run:
+
+  npm install
+  npm start
+
+The shared server must contain the latest project files:
+
+  server.js
+  package.json
+  package-lock.json
+  public/
+  public/assets/
+  data/ starter files if you want seeded accounts/items/games
+
+After the server is online:
+
+1. Open the URL in a browser and make sure /health answers.
+2. Copy cubixia-server.example.json to cubixia-server.json.
+3. Replace the example URL with your real URL.
+4. Put cubixia-server.json beside CUBIXIA-LATEST.exe.
+5. Send the whole ZIP to players.
+
+Everyone who uses the same cubixia-server.json will share:
+
+  accounts
+  friend requests
+  staff role changes
+  admin actions
+  game deletion/undeletion
+  reports
+  chat
+  multiplayer presence
+
+Do not use localhost, 127.0.0.1, or a private LAN IP for players across your
+state. Those only work on your own computer or local network.
+
+Old Render configs are ignored unless cubixia-server.json also contains:
+
+  "allowRender": true
+
+That prevents CUBIXIA from getting stuck on the broken Render deployment again.

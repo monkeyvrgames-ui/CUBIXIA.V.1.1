@@ -1,0 +1,43 @@
+CUBIXIA Render fix checklist
+
+Your EXE is already pointing at:
+https://cubixia.onrender.com
+
+If the EXE says "CUBIXIA World is offline" or Render stays on "Application Loading",
+the Render web service itself is not running the latest CUBIXIA server.
+
+Fix it on Render:
+
+1. Redeploy the latest CUBIXIA source.
+   Use the ZIP named CUBIXIA-RENDER-LATEST-SOURCE-1.0.12.zip, or push these exact
+   files to the GitHub repo connected to Render.
+
+2. Render settings should be:
+   Build Command:
+   npm ci --omit=dev
+
+   Start Command:
+   npm run start:render
+
+   Health Check Path:
+   /health
+
+3. Render environment variables should include:
+   NODE_ENV=production
+   CUBIXIA_DATA_DIR=/var/data/cubixia
+   SESSION_SECRET=(any long random secret)
+   GMAIL_USER=(your Gmail sender)
+   GMAIL_APP_PASSWORD=(your Gmail app password)
+
+4. After deploy finishes, open:
+   https://cubixia.onrender.com/health
+
+   It should show:
+   {"ok":true,"app":"CUBIXIA",...}
+
+5. Then open the EXE again.
+
+Important:
+The EXE cannot upload files to Render. Render must be redeployed with the latest
+server.js, public/app.js, public/styles.css, public/assets, package.json,
+package-lock.json, and render.yaml.

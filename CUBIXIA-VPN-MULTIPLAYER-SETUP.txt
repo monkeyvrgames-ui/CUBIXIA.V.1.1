@@ -1,0 +1,71 @@
+CUBIXIA playable multiplayer without Render
+
+CUBIXIA needs one shared server. The easiest no-Render way is:
+
+  Host player runs CUBIXIA in Host Mode.
+  Other players run CUBIXIA in Shared Mode pointed at the host's VPN IP.
+
+HOST SETUP
+
+1. Copy cubixia-host.example.json.
+2. Rename the copy to cubixia-host.json.
+3. Put cubixia-host.json beside CUBIXIA-LATEST.exe.
+4. Open the EXE.
+5. It should show CUBIXIA Host Mode.
+6. Leave that EXE open while friends play.
+
+CLIENT SETUP
+
+1. Copy cubixia-server.example.json.
+2. Rename the copy to cubixia-server.json.
+3. Put the host URL inside:
+
+   { "serverUrl": "http://HOST-VPN-IP:3000" }
+
+4. Put cubixia-server.json beside CUBIXIA-LATEST.exe.
+5. Open the EXE.
+6. It should show Worldwide Mode Connected.
+
+OPTION 1: TAILSCALE
+
+1. Host and friend both install Tailscale.
+2. Both sign into the same Tailnet or invite the friend.
+3. Host opens CUBIXIA with cubixia-host.json beside the EXE.
+4. Host finds their Tailscale IP. It usually starts with 100.
+5. Friend's cubixia-server.json should be:
+
+   { "serverUrl": "http://HOST-TAILSCALE-IP:3000" }
+
+6. Friend opens the EXE.
+
+OPTION 2: ZEROTIER
+
+1. Host and friend both install ZeroTier.
+2. Both join the same ZeroTier network.
+3. Approve both devices in the ZeroTier dashboard.
+4. Host opens CUBIXIA with cubixia-host.json beside the EXE.
+5. Host finds their ZeroTier managed IP.
+6. Friend's cubixia-server.json should be:
+
+   { "serverUrl": "http://HOST-ZEROTIER-IP:3000" }
+
+7. Friend opens the EXE.
+
+HOW TO KNOW IT WORKS
+
+If both players are connected to the same server:
+
+  Friend search finds usernames created by either player.
+  Friend requests appear in notifications.
+  Staff commands affect the other player.
+  Joining the same game shows both avatars.
+
+If friend search says the user does not exist:
+
+  The two EXEs are not connected to the same server.
+  Check that both are using the exact same host URL.
+  Check that the host EXE is still open.
+  Check Windows Firewall allows the host computer to receive port 3000.
+
+Do not use localhost or 127.0.0.1 in a friend's cubixia-server.json.
+That points to their own computer, not yours.

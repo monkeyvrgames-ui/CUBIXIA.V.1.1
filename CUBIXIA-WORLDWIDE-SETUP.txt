@@ -1,0 +1,40 @@
+CUBIXIA worldwide accounts setup
+
+The EXE can run two ways:
+
+1. Local testing mode
+   - No cubixia-server.json beside the EXE.
+   - Every computer has private accounts.
+   - Friend search only finds accounts made on that same computer.
+
+2. Worldwide shared mode
+   - Put cubixia-server.json beside the EXE.
+   - The EXE opens your hosted CUBIXIA server.
+   - Every player uses the same account database.
+   - Friend search, friend requests, admin panels, roles, reports, games, and chat all see the same users.
+
+To turn worldwide mode on:
+
+1. Deploy THIS exact project folder to a public Node host, VPS, or tunnel.
+2. Make sure the deployed server includes:
+   - server.js
+   - public/app.js
+   - public/styles.css
+   - public/assets
+   - package.json
+   - package-lock.json
+3. In your host dashboard or server environment, add these variables:
+   - GMAIL_USER
+   - GMAIL_APP_PASSWORD
+   - SESSION_SECRET
+4. Copy cubixia-server.example.json to cubixia-server.json.
+5. Put your real shared server URL inside cubixia-server.json:
+   { "serverUrl": "https://your-cubixia-server.example.com" }
+6. Put cubixia-server.json in the same folder as CUBIXIA-LATEST.exe.
+5. Send the ZIP to players, not just the EXE by itself.
+
+If the other player makes an account in worldwide mode, you can search their username,
+send a friend request, give roles, moderate them, and see them in shared systems.
+
+If the EXE opens local testing, cubixia-server.json is missing or ignored.
+If it says CUBIXIA World is offline, the URL exists but the shared server is not reachable.
