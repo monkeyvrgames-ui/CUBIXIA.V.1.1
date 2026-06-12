@@ -1285,6 +1285,9 @@ function createGmailTransporter() {
   if (!user || !password) return null;
   return nodemailer.createTransport({
     service: "gmail",
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
     auth: {
       user,
       pass: password
@@ -1292,15 +1295,22 @@ function createGmailTransporter() {
   });
 }
 
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(`${label} timed out after ${Math.round(ms / 1000)} seconds.`)), ms))
+  ]);
+}
+
 async function sendRecoveryEmail(user, code) {
   const transporter = createGmailTransporter();
   if (!transporter) return false;
-  await transporter.sendMail({
+  await withTimeout(transporter.sendMail({
     from: `"CUBIXIA Recovery" <${gmailUserEnv()}>`,
     to: user.email,
     subject: "Your CUBIXIA recovery code",
     text: `Your CUBIXIA password recovery code is ${code}. It expires in 15 minutes.`
-  });
+  }), 15000, "Gmail recovery email");
   return true;
 }
 
@@ -1314,7 +1324,7 @@ async function verifyGmailTransporter() {
     };
   }
   try {
-    await createGmailTransporter().verify();
+    await withTimeout(createGmailTransporter().verify(), 15000, "Gmail SMTP check");
     return { ...status, smtpVerified: true, error: "" };
   } catch (error) {
     return { ...status, smtpVerified: false, error: publicMailError(error) };
@@ -1418,12 +1428,12 @@ function rememberTwoStepDevice(req, res, user) {
 async function sendTwoStepEmail(user, code) {
   const transporter = createGmailTransporter();
   if (!transporter) return false;
-  await transporter.sendMail({
+  await withTimeout(transporter.sendMail({
     from: `"CUBIXIA Security" <${gmailUserEnv()}>`,
     to: user.email,
     subject: "Your CUBIXIA 2-step verification code",
     text: `Your CUBIXIA login security code is ${code}. It expires in 10 minutes. If you did not try to log in, change your password immediately.`
-  });
+  }), 15000, "Gmail 2-step email");
   return true;
 }
 
@@ -2073,7 +2083,7 @@ app.get("/health", (_req, res) => {
   res.json({
     ok: true,
     app: "CUBIXIA",
-    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.1.0",
+    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.1.1",
     mode: process.env.CUBIXIA_DESKTOP ? "desktop-local-server" : "shared-server",
     gmailReady: gmail.ready,
     gmailUserSet: gmail.userSet,
@@ -2088,7 +2098,7 @@ app.get("/health/email", async (_req, res) => {
   res.json({
     ok: true,
     app: "CUBIXIA",
-    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.1.0",
+    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.1.1",
     gmailReady: gmail.ready,
     gmailUserSet: gmail.userSet,
     gmailPasswordSet: gmail.passwordSet,
