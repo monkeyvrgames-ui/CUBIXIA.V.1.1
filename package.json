@@ -1,6 +1,6 @@
 {
   "name": "cubixia-platform-demo",
-  "version": "1.1.2",
+  "version": "1.1.3",
   "author": "CUBIXIA",
   "description": "A CUBIXIA account, social, profile, and survival game platform demo.",
   "main": "desktop-main.js",

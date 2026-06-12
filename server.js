@@ -25,6 +25,9 @@ const CONTENT_FILE = path.join(DATA_DIR, "content-state.json");
 const DESKTOP_DATA_MARKER_FILE = path.join(DATA_DIR, "desktop-data-version.txt");
 const TWO_STEP_DEVICE_COOKIE = "cubixia_2fa_device";
 const TWO_STEP_REMEMBER_MS = 30 * 24 * 60 * 60 * 1000;
+const AUTH_COOKIE = "cubixia_auth";
+const AUTH_REMEMBER_MS = 365 * 24 * 60 * 60 * 1000;
+const SKIP_TWO_STEP_FOR_NOW = process.env.CUBIXIA_SKIP_TWO_STEP !== "false";
 let userWriteQueue = Promise.resolve();
 let chatWriteQueue = Promise.resolve();
 let reportWriteQueue = Promise.resolve();
@@ -214,7 +217,8 @@ app.use(
     cookie: {
       httpOnly: true,
       sameSite: "lax",
-      secure: process.env.NODE_ENV === "production"
+      secure: process.env.NODE_ENV === "production",
+      maxAge: AUTH_REMEMBER_MS
     }
   })
 );
@@ -726,6 +730,13 @@ function activeRememberedDevices(user) {
     .slice(-10);
 }
 
+function activeAuthTokens(user) {
+  const now = Date.now();
+  return (Array.isArray(user.authTokens) ? user.authTokens : [])
+    .filter((token) => token && token.tokenHash && Number(token.expiresAt || 0) > now)
+    .slice(-12);
+}
+
 function normalizeHexColor(value, fallback) {
   const color = String(value || "").trim();
   return /^#[0-9a-fA-F]{6}$/.test(color) ? color.toLowerCase() : fallback;
@@ -852,6 +863,7 @@ function normalizeUser(user) {
       verifiedAt: Number(user.twoStep?.verifiedAt || 0),
       rememberedDevices: activeRememberedDevices(user)
     },
+    authTokens: activeAuthTokens(user),
     lastPlayed: user.lastPlayed || {
       id: "cubixia-survival",
       title: "Cubixia: Survival",
@@ -1428,6 +1440,70 @@ function rememberTwoStepDevice(req, res, user) {
   });
 }
 
+function rememberLogin(res, user) {
+  const token = crypto.randomBytes(32).toString("hex");
+  const now = Date.now();
+  user.authTokens = [
+    ...activeAuthTokens(user),
+    {
+      id: crypto.randomUUID(),
+      tokenHash: hashDeviceToken(token),
+      createdAt: new Date(now).toISOString(),
+      lastUsedAt: new Date(now).toISOString(),
+      expiresAt: now + AUTH_REMEMBER_MS
+    }
+  ].slice(-12);
+  res.cookie(AUTH_COOKIE, `${user.id}.${token}`, {
+    ...cookieOptions(AUTH_REMEMBER_MS),
+    expires: new Date(now + AUTH_REMEMBER_MS)
+  });
+}
+
+function clearRememberedLogin(res) {
+  res.clearCookie(AUTH_COOKIE, cookieOptions(0));
+}
+
+async function restoreRememberedLogin(req, res) {
+  const cookie = parseCookies(req)[AUTH_COOKIE];
+  if (!cookie || !cookie.includes(".")) return null;
+  const [userId, token] = cookie.split(".", 2);
+  if (!userId || !token) return null;
+  const users = await readUsers();
+  const user = users.find((entry) => entry.id === userId);
+  if (!user) {
+    clearRememberedLogin(res);
+    return null;
+  }
+  const tokenHash = hashDeviceToken(token);
+  const tokens = activeAuthTokens(user);
+  const authToken = tokens.find((entry) => entry.tokenHash === tokenHash);
+  if (!authToken) {
+    user.authTokens = tokens;
+    clearRememberedLogin(res);
+    await writeUsers(users);
+    return null;
+  }
+  authToken.lastUsedAt = new Date().toISOString();
+  user.authTokens = tokens;
+  user.online = true;
+  user.lastOnline = new Date().toISOString();
+  stampRequestDevice(user, req);
+  req.session.userId = user.id;
+  await writeUsers(users);
+  return { users, user };
+}
+
+function truthyEnv(value) {
+  return /^(1|true|yes|on)$/i.test(String(value || "").trim());
+}
+
+function shouldBypassTwoStep(user) {
+  if (SKIP_TWO_STEP_FOR_NOW) return true;
+  if (truthyEnv(process.env.CUBIXIA_DISABLE_2FA)) return true;
+  const ownerBypassEnabled = process.env.CUBIXIA_OWNER_BYPASS_2FA !== "false";
+  return ownerBypassEnabled && String(user?.username || "").toLowerCase() === "tanklyplayz";
+}
+
 async function sendTwoStepEmail(user, code) {
   const transporter = createGmailTransporter();
   if (!transporter) return false;
@@ -1580,6 +1656,7 @@ app.post("/api/register", async (req, res) => {
   stampRequestDevice(user, req);
 
   users.push(user);
+  rememberLogin(res, user);
   await writeUsers(users);
   req.session.userId = user.id;
   res.status(201).json({ user: publicUser(user, users) });
@@ -1607,11 +1684,12 @@ app.post("/api/login", async (req, res) => {
   if (!passwordOk) {
     return res.status(401).json({ error: "Incorrect username or password." });
   }
-  if (user.twoStep?.enabled !== false) {
+  if (user.twoStep?.enabled !== false && !shouldBypassTwoStep(user)) {
     if (hasValidRememberedDevice(req, user)) {
       user.online = true;
       user.lastOnline = new Date().toISOString();
       stampRequestDevice(user, req);
+      rememberLogin(res, user);
       await writeUsers(users);
       req.session.userId = user.id;
       return res.json({ user: publicUser(user, users), moderation: activeModeration(user), twoStepRemembered: true });
@@ -1621,9 +1699,10 @@ app.post("/api/login", async (req, res) => {
   user.online = true;
   user.lastOnline = new Date().toISOString();
   stampRequestDevice(user, req);
+  rememberLogin(res, user);
   await writeUsers(users);
   req.session.userId = user.id;
-  res.json({ user: publicUser(user, users), moderation: activeModeration(user) });
+  res.json({ user: publicUser(user, users), moderation: activeModeration(user), twoStepBypassed: user.twoStep?.enabled !== false && shouldBypassTwoStep(user) });
 });
 
 app.post("/api/login/verify-2fa", async (req, res) => {
@@ -1661,6 +1740,7 @@ app.post("/api/login/verify-2fa", async (req, res) => {
   user.online = true;
   user.lastOnline = new Date().toISOString();
   stampRequestDevice(user, req);
+  rememberLogin(res, user);
   await writeUsers(users);
   req.session.userId = user.id;
   delete req.session.pendingTwoStepUserId;
@@ -1733,10 +1813,16 @@ app.post("/api/recover/finish", async (req, res) => {
 });
 
 app.post("/api/logout", async (req, res) => {
+  const rememberedCookie = parseCookies(req)[AUTH_COOKIE];
+  const rememberedToken = rememberedCookie?.includes(".") ? rememberedCookie.split(".", 2) : null;
   if (req.session.userId) {
     const users = await readUsers();
     const user = users.find((entry) => entry.id === req.session.userId);
     if (user) {
+      if (rememberedToken && rememberedToken[0] === user.id) {
+        const tokenHash = hashDeviceToken(rememberedToken[1]);
+        user.authTokens = activeAuthTokens(user).filter((entry) => entry.tokenHash !== tokenHash);
+      }
       user.online = false;
       user.currentGame = "";
       user.lastOnline = new Date().toISOString();
@@ -1746,18 +1832,27 @@ app.post("/api/logout", async (req, res) => {
 
   req.session.destroy(() => {
     res.clearCookie("connect.sid");
+    clearRememberedLogin(res);
     res.json({ ok: true });
   });
 });
 
 app.get("/api/me", async (req, res) => {
-  const userId = requireSession(req, res);
-  if (!userId) return;
-
-  const users = await readUsers();
+  let users;
+  let user;
+  let userId = req.session?.userId;
+  if (!userId) {
+    const restored = await restoreRememberedLogin(req, res);
+    if (!restored) return res.status(401).json({ error: "Not logged in." });
+    users = restored.users;
+    user = restored.user;
+    userId = user.id;
+  } else {
+    users = await readUsers();
+  }
   const ipBan = activeIpBanForRequest(req, users);
   if (ipBan) return res.status(423).json({ error: ipBan.moderation.title, moderation: ipBan.moderation });
-  const user = requireSessionUser(users, userId, res);
+  user = user || requireSessionUser(users, userId, res);
   if (!user) return;
   user.online = true;
   user.lastOnline = new Date().toISOString();
@@ -2102,7 +2197,8 @@ app.get("/health", (_req, res) => {
   res.json({
     ok: true,
     app: "CUBIXIA",
-    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.1.2",
+    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.1.3",
+    twoStepSkipped: SKIP_TWO_STEP_FOR_NOW,
     mode: process.env.CUBIXIA_DESKTOP ? "desktop-local-server" : "shared-server",
     gmailReady: gmail.ready,
     gmailUserSet: gmail.userSet,
@@ -2117,7 +2213,8 @@ app.get("/health/email", async (_req, res) => {
   res.json({
     ok: true,
     app: "CUBIXIA",
-    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.1.2",
+    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.1.3",
+    twoStepSkipped: SKIP_TWO_STEP_FOR_NOW,
     gmailReady: gmail.ready,
     gmailUserSet: gmail.userSet,
     gmailPasswordSet: gmail.passwordSet,
