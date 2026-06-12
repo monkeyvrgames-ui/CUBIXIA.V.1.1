@@ -1,0 +1,86 @@
+[
+  {
+    "id": "2c58df3f-e6e4-470a-9acf-85c541261d31",
+    "reporter": "Tanklyplayz",
+    "target": "John_Doe",
+    "targetType": "Experience",
+    "abuseType": "Cheating",
+    "details": "Dookie everywhere",
+    "status": "deleted",
+    "createdAt": "2026-05-29T14:59:59.943Z",
+    "deletedBy": "Tanklyplayz",
+    "deletedAt": "2026-06-10T00:38:13.586Z"
+  },
+  {
+    "id": "b02035af-cddf-4d13-99e0-c29d6128d0bf",
+    "reporter": "Tanklyplayz",
+    "target": "Tanklyplayz",
+    "targetType": "Experience",
+    "abuseType": "Cheating",
+    "details": "dOOKIE",
+    "status": "deleted",
+    "createdAt": "2026-05-27T11:58:39.241Z",
+    "deletedBy": "Tanklyplayz",
+    "deletedAt": "2026-05-27T11:59:01.117Z"
+  },
+  {
+    "id": "594cb274-adb2-45ef-aa80-76f614409c4f",
+    "reporter": "Tanklyplayz",
+    "target": "Tanklyplayz",
+    "targetType": "Experience",
+    "abuseType": "Bullying",
+    "details": "gihewefas\n",
+    "status": "deleted",
+    "createdAt": "2026-05-26T21:06:21.188Z",
+    "deletedBy": "Tanklyplayz",
+    "deletedAt": "2026-05-26T21:10:05.563Z"
+  },
+  {
+    "id": "17185a8d-1403-4703-913d-06a5f6c2aee6",
+    "reporter": "John_Doe",
+    "target": "Cubixia Coaster Tycoon",
+    "targetType": "Experience",
+    "abuseType": "Cheating",
+    "details": "Cheating flying around teleporting!",
+    "status": "deleted",
+    "createdAt": "2026-05-26T03:24:05.508Z",
+    "deletedBy": "Tanklyplayz",
+    "deletedAt": "2026-05-26T03:24:49.602Z"
+  },
+  {
+    "id": "4b0cc484-d56e-4c02-bad2-75e5152d36c9",
+    "reporter": "John_Doe",
+    "target": "John_Doe",
+    "targetType": "Person",
+    "abuseType": "Cheating",
+    "details": "being a big fat jerk mate!",
+    "status": "deleted",
+    "createdAt": "2026-05-26T02:59:04.126Z",
+    "deletedBy": "Tanklyplayz",
+    "deletedAt": "2026-05-26T03:00:29.473Z"
+  },
+  {
+    "id": "ceb1b6dd-95b9-4fe1-abd5-06c63a8fdf1d",
+    "reporter": "John_Doe",
+    "target": "Speed Trials",
+    "targetType": "Experience",
+    "abuseType": "Bullying",
+    "details": "DICK",
+    "status": "deleted",
+    "createdAt": "2026-05-26T02:25:04.297Z",
+    "deletedBy": "Tanklyplayz",
+    "deletedAt": "2026-05-26T02:25:17.434Z"
+  },
+  {
+    "id": "e3539d44-9cf9-48ce-a162-4fdd5f3ef8ca",
+    "reporter": "Target45480",
+    "target": "Target45480",
+    "targetType": "Person",
+    "abuseType": "Cheating",
+    "details": "admin report access check",
+    "status": "deleted",
+    "createdAt": "2026-05-26T02:21:25.716Z",
+    "deletedBy": "Admin45480",
+    "deletedAt": "2026-05-26T02:21:27.806Z"
+  }
+]

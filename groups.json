@@ -1,0 +1,290 @@
+{
+  "games": {
+    "speed-trials": {
+      "deleted": false,
+      "originalName": "Speed Trials",
+      "reason": "Deleted by CUBIXIA moderation.",
+      "deletedBy": "Tanklyplayz",
+      "deletedAt": "2026-05-27T20:19:18.674Z",
+      "restoredBy": "Tanklyplayz",
+      "restoredAt": "2026-05-27T20:19:43.129Z"
+    },
+    "gravity-flip": {
+      "deleted": false,
+      "originalName": "Gravity Flip",
+      "reason": "Deleted by CUBIXIA moderation.",
+      "deletedBy": "Tanklyplayz",
+      "deletedAt": "2026-05-28T01:55:56.545Z",
+      "restoredBy": "Tanklyplayz",
+      "restoredAt": "2026-05-28T01:56:09.597Z"
+    },
+    "coaster-tycoon": {
+      "deleted": false,
+      "originalName": "Cubixia Coaster Tycoon",
+      "reason": "Deleted by CUBIXIA moderation.",
+      "deletedBy": "Tanklyplayz",
+      "deletedAt": "2026-05-27T21:13:14.451Z",
+      "restoredBy": "Tanklyplayz",
+      "restoredAt": "2026-05-27T21:13:40.819Z"
+    }
+  },
+  "items": {
+    "starter-shirt": {
+      "deleted": false,
+      "originalName": "First Play CUBIXIA Shirt",
+      "reason": "Deleted by CUBIXIA moderation.",
+      "deletedBy": "Tanklyplayz",
+      "deletedAt": "2026-05-28T01:56:28.622Z",
+      "restoredBy": "Tanklyplayz",
+      "restoredAt": "2026-05-28T01:56:45.927Z"
+    }
+  },
+  "gameStats": {
+    "cubixia-survival": {
+      "likes": 0,
+      "dislikes": 1,
+      "favorites": 0,
+      "notifies": 0
+    },
+    "studio-tanklyplayz-s-world-b3e13024": {
+      "likes": 0,
+      "dislikes": 0,
+      "favorites": 0,
+      "notifies": 0
+    },
+    "speed-trials": {
+      "likes": 0,
+      "dislikes": 0,
+      "favorites": 0,
+      "notifies": 0
+    }
+  },
+  "chatControls": {
+    "game:coaster-tycoon": {
+      "slowmode": 0,
+      "updatedBy": "Tanklyplayz",
+      "updatedAt": 1781081209472,
+      "locked": false
+    }
+  },
+  "serverControls": {
+    "coaster-tycoon": {
+      "lastCommand": "shutdownserver",
+      "reason": "TEST",
+      "updatedBy": "Tanklyplayz",
+      "updatedAt": 1781080260886
+    },
+    "speed-trials": {
+      "lastCommand": "restartserver",
+      "reason": "TESTING",
+      "updatedBy": "Tanklyplayz",
+      "updatedAt": 1781081379450
+    }
+  },
+  "gameEvents": {
+    "coaster-tycoon": {
+      "command": "firework",
+      "value": "all",
+      "by": "Tanklyplayz",
+      "createdAt": 1781129401773
+    },
+    "speed-trials": {
+      "command": "tiny",
+      "value": "",
+      "by": "Tanklyplayz",
+      "createdAt": 1781081417854
+    }
+  },
+  "worldEvents": {
+    "coaster-tycoon": [
+      {
+        "id": "fe3575fa-ded4-4758-88c9-c06be18ba0f4",
+        "gameId": "coaster-tycoon",
+        "userId": "7914487d-6c47-4b73-8cf4-2a49f55c5bde",
+        "username": "Tanklyplayz",
+        "type": "interact",
+        "position": {
+          "x": 0,
+          "y": 0.8,
+          "z": 5.5,
+          "rot": 0
+        },
+        "payload": {
+          "label": "build",
+          "target": ""
+        },
+        "createdAt": 1781129339053
+      },
+      {
+        "id": "3eb922fb-01c9-4865-9010-2d467fef3469",
+        "gameId": "coaster-tycoon",
+        "userId": "7914487d-6c47-4b73-8cf4-2a49f55c5bde",
+        "username": "Tanklyplayz",
+        "type": "interact",
+        "position": {
+          "x": -0.0856905245740959,
+          "y": 0.8,
+          "z": 2.9160349481638805,
+          "rot": -2.9369785117303824
+        },
+        "payload": {
+          "label": "build",
+          "target": ""
+        },
+        "createdAt": 1781129343171
+      },
+      {
+        "id": "a4a43752-d267-4fac-9a78-57355de41f9c",
+        "gameId": "coaster-tycoon",
+        "userId": "7914487d-6c47-4b73-8cf4-2a49f55c5bde",
+        "username": "Tanklyplayz",
+        "type": "interact",
+        "position": {
+          "x": -0.0856905245740959,
+          "y": 0.8,
+          "z": 2.9160349481638805,
+          "rot": -2.9369785117303824
+        },
+        "payload": {
+          "label": "build",
+          "target": ""
+        },
+        "createdAt": 1781129347107
+      },
+      {
+        "id": "0eb22177-3aea-4abb-b5f9-4a9785d503d6",
+        "gameId": "coaster-tycoon",
+        "userId": "7914487d-6c47-4b73-8cf4-2a49f55c5bde",
+        "username": "Tanklyplayz",
+        "type": "interact",
+        "position": {
+          "x": 1.3214581930102907,
+          "y": 0.8,
+          "z": -0.20304642692171979,
+          "rot": 9.110891044581749
+        },
+        "payload": {
+          "label": "build",
+          "target": ""
+        },
+        "createdAt": 1781129376103
+      },
+      {
+        "id": "b6c55420-754f-4bb1-a018-1bcd410d31d6",
+        "gameId": "coaster-tycoon",
+        "userId": "7914487d-6c47-4b73-8cf4-2a49f55c5bde",
+        "username": "Tanklyplayz",
+        "type": "interact",
+        "position": {
+          "x": 0.29217422235920165,
+          "y": 0.8,
+          "z": -0.41639634904594763,
+          "rot": 12.72955572705492
+        },
+        "payload": {
+          "label": "build",
+          "target": ""
+        },
+        "createdAt": 1781129386921
+      },
+      {
+        "id": "355500ac-51d9-4e94-bd7a-6755afa07eb8",
+        "gameId": "coaster-tycoon",
+        "userId": "7914487d-6c47-4b73-8cf4-2a49f55c5bde",
+        "username": "Tanklyplayz",
+        "type": "interact",
+        "position": {
+          "x": -0.28072420820341176,
+          "y": 0.8,
+          "z": 2.22397925626655,
+          "rot": 15.178748754544966
+        },
+        "payload": {
+          "label": "build",
+          "target": ""
+        },
+        "createdAt": 1781129403130
+      },
+      {
+        "id": "eebc0e53-a062-4f03-8602-02ee929f71cc",
+        "gameId": "coaster-tycoon",
+        "userId": "7d239fc5-655c-4916-8ced-f7b4ad2301cb",
+        "username": "CUBIXIA",
+        "type": "interact",
+        "position": {
+          "x": 0,
+          "y": 0.8,
+          "z": 5.5,
+          "rot": 0
+        },
+        "payload": {
+          "label": "build",
+          "target": ""
+        },
+        "createdAt": 1781129405715
+      },
+      {
+        "id": "d79023cc-09a1-4205-83f9-30df03162efb",
+        "gameId": "coaster-tycoon",
+        "userId": "7914487d-6c47-4b73-8cf4-2a49f55c5bde",
+        "username": "Tanklyplayz",
+        "type": "interact",
+        "position": {
+          "x": 0,
+          "y": 0.8,
+          "z": 5.5,
+          "rot": 0
+        },
+        "payload": {
+          "label": "build",
+          "target": ""
+        },
+        "createdAt": 1781131123757
+      },
+      {
+        "id": "3abc371f-db7b-4e6f-9344-5dd105c2db41",
+        "gameId": "coaster-tycoon",
+        "userId": "7914487d-6c47-4b73-8cf4-2a49f55c5bde",
+        "username": "Tanklyplayz",
+        "type": "interact",
+        "position": {
+          "x": -9.308086428767444,
+          "y": 0.8,
+          "z": 0.8490296327572936,
+          "rot": 1.5738171786905446
+        },
+        "payload": {
+          "label": "build",
+          "target": ""
+        },
+        "createdAt": 1781133632566
+      },
+      {
+        "id": "1c6083a6-ed70-44f9-bc74-5bcdd94607c6",
+        "gameId": "coaster-tycoon",
+        "userId": "7914487d-6c47-4b73-8cf4-2a49f55c5bde",
+        "username": "Tanklyplayz",
+        "type": "interact",
+        "position": {
+          "x": -32.08818500782296,
+          "y": 0.8,
+          "z": -4.439050737523757,
+          "rot": 1.4315926535897918
+        },
+        "payload": {
+          "label": "build",
+          "target": ""
+        },
+        "createdAt": 1781133673718
+      }
+    ]
+  },
+  "lockdown": {
+    "active": false,
+    "reason": "",
+    "staffMessage": "",
+    "lockedBy": "Tanklyplayz",
+    "startedAt": 0,
+    "audioUntil": 0
+  }
+}

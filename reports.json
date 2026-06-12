@@ -1,0 +1,105 @@
+[
+  {
+    "id": "cubixia-studios",
+    "name": "Cubixia Studios",
+    "owner": "Tanklyplayz",
+    "logo": "CX",
+    "price": 0,
+    "description": "Official CUBIXIA development and creator group.",
+    "createdAt": "2026-05-25T00:00:00.000Z",
+    "visits": 523,
+    "favorites": 3,
+    "roles": [
+      "Owner",
+      "Admin",
+      "Moderator",
+      "Member"
+    ],
+    "announcements": [
+      {
+        "id": "95d91243-8310-421b-954f-c3d462362691",
+        "title": "Hello Everyone! Its me Tanklyplayz!",
+        "body": "Hi:D",
+        "createdAt": "2026-05-26T02:45:32.606Z"
+      },
+      {
+        "id": "launch",
+        "title": "Welcome to Cubixia Studios",
+        "body": "Official updates, creator tools, moderation notes, and game announcements will show here.",
+        "createdAt": "2026-05-25T00:00:00.000Z"
+      }
+    ]
+  },
+  {
+    "id": "survival-squad",
+    "name": "Survival Squad",
+    "owner": "CUBIXIA",
+    "logo": "ZS",
+    "price": 0,
+    "description": "Wave pushing, weapon testing, and safe-zone events.",
+    "createdAt": "2026-05-25T00:00:00.000Z",
+    "visits": 128,
+    "favorites": 1,
+    "roles": [
+      "Leader",
+      "Fighter",
+      "Member"
+    ],
+    "announcements": [
+      {
+        "id": "waves",
+        "title": "Wave nights",
+        "body": "Squad up for zombie survival testing.",
+        "createdAt": "2026-05-25T00:00:00.000Z"
+      }
+    ]
+  },
+  {
+    "id": "tycoon-builders",
+    "name": "Tycoon Builders",
+    "owner": "CUBIXIA",
+    "logo": "TB",
+    "price": 0,
+    "description": "Ride layouts, price experiments, and park showcases.",
+    "createdAt": "2026-05-25T00:00:00.000Z",
+    "visits": 94,
+    "favorites": 1,
+    "roles": [
+      "Manager",
+      "Builder",
+      "Member"
+    ],
+    "announcements": [
+      {
+        "id": "rides",
+        "title": "Ride showcase",
+        "body": "Post your best coaster and park ideas.",
+        "createdAt": "2026-05-25T00:00:00.000Z"
+      }
+    ]
+  },
+  {
+    "id": "avatar-creators",
+    "name": "Avatar Creators",
+    "owner": "CUBIXIA",
+    "logo": "AC",
+    "price": 0,
+    "description": "Free outfits, launch badges, and CUBIXIA style drops.",
+    "createdAt": "2026-05-25T00:00:00.000Z",
+    "visits": 72,
+    "favorites": 1,
+    "roles": [
+      "Designer",
+      "Creator",
+      "Member"
+    ],
+    "announcements": [
+      {
+        "id": "first-shirt",
+        "title": "First play outfit",
+        "body": "New launch clothing is available for free.",
+        "createdAt": "2026-05-25T00:00:00.000Z"
+      }
+    ]
+  }
+]
