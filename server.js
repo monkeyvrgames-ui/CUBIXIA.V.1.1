@@ -206,6 +206,7 @@ const DEFAULT_GROUPS = [
   { id: "avatar-creators", name: "Avatar Creators", owner: "CUBIXIA", logo: "AC", price: 0, description: "Free outfits, launch badges, and CUBIXIA style drops.", createdAt: "2026-05-25T00:00:00.000Z", visits: 72, favorites: 1, roles: ["Designer", "Creator", "Member"], announcements: [{ id: "first-shirt", title: "First play outfit", body: "New launch clothing is available for free.", createdAt: "2026-05-25T00:00:00.000Z" }] }
 ];
 const BLOCKED_CHAT_TERMS = ["nigger", "nigga", "fuck", "shit", "bitch", "asshole", "dick", "pussy", "cunt", "fag"];
+const STAFF_ALERT_CHAT_TERMS = new Set(BLOCKED_CHAT_TERMS.slice(0, 2));
 
 app.set("trust proxy", true);
 app.use(express.json({ limit: "2mb" }));
@@ -2226,7 +2227,7 @@ app.get("/health", (_req, res) => {
   res.json({
     ok: true,
     app: "CUBIXIA",
-    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.1.5",
+    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.1.6",
     twoStepSkipped: SKIP_TWO_STEP_FOR_NOW,
     mode: process.env.CUBIXIA_DESKTOP ? "desktop-local-server" : "shared-server",
     gmailReady: gmail.ready,
@@ -2242,7 +2243,7 @@ app.get("/health/email", async (_req, res) => {
   res.json({
     ok: true,
     app: "CUBIXIA",
-    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.1.5",
+    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.1.6",
     twoStepSkipped: SKIP_TWO_STEP_FOR_NOW,
     gmailReady: gmail.ready,
     gmailUserSet: gmail.userSet,
@@ -3297,6 +3298,63 @@ app.get("/api/chat", async (req, res) => {
   res.json({ messages: messages.filter((message) => message.room === room).slice(-40) });
 });
 
+function chatTermPattern(term) {
+  const leet = {
+    a: "[a@4]",
+    b: "[b8]",
+    e: "[e3]",
+    f: "[fph]",
+    g: "[g69]",
+    i: "[i1!|]",
+    l: "[l1!|]",
+    o: "[o0]",
+    s: "[s$5z]",
+    t: "[t7+]",
+    u: "[uv]"
+  };
+  return String(term).split("").map((char) => leet[char] || char.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("[\\W_]*");
+}
+
+const CHAT_TERM_REGEXES = BLOCKED_CHAT_TERMS.map((term) => ({
+  term,
+  regex: new RegExp(chatTermPattern(term), "gi")
+}));
+
+function filterChatText(rawText) {
+  let cleanText = String(rawText || "").slice(0, 180);
+  const flaggedTerms = new Set();
+  for (const entry of CHAT_TERM_REGEXES) {
+    cleanText = cleanText.replace(entry.regex, (match) => {
+      flaggedTerms.add(entry.term);
+      return "#".repeat(Math.max(4, Math.min(12, match.length)));
+    });
+  }
+  const severe = [...flaggedTerms].some((term) => STAFF_ALERT_CHAT_TERMS.has(term));
+  return {
+    cleanText,
+    flaggedTerms: [...flaggedTerms],
+    severe
+  };
+}
+
+function notifyStaffChatFlag(users, offender, room, originalText, filteredText, severe) {
+  const recipients = users.filter((entry) => canModerate(entry));
+  const createdAt = new Date().toISOString();
+  recipients.forEach((recipient) => {
+    recipient.notifications = recipient.notifications || [];
+    recipient.notifications.unshift({
+      id: crypto.randomUUID(),
+      type: severe ? "chat_slur_alert" : "chat_filter_alert",
+      from: offender.username,
+      text: `${severe ? "Severe chat filter" : "Chat filter"} in ${room}: "${String(originalText).slice(0, 160)}" -> "${String(filteredText).slice(0, 160)}"`,
+      room,
+      originalText: String(originalText).slice(0, 300),
+      filteredText: String(filteredText).slice(0, 300),
+      createdAt
+    });
+  });
+}
+
 app.post("/api/chat", async (req, res) => {
   const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
@@ -3333,11 +3391,11 @@ app.post("/api/chat", async (req, res) => {
     }
     user.chatSlowmodeAt[room] = Date.now();
   }
-  const text = String(req.body.text || "").slice(0, 180);
-  if (!text.trim()) return res.status(400).json({ error: "Message cannot be empty." });
-  if (BLOCKED_CHAT_TERMS.some((term) => text.toLowerCase().includes(term))) {
-    return res.status(400).json({ error: "That message is not allowed on CUBIXIA." });
-  }
+  const originalText = String(req.body.text || "").slice(0, 180);
+  if (!originalText.trim()) return res.status(400).json({ error: "Message cannot be empty." });
+  const filtered = filterChatText(originalText);
+  const text = filtered.cleanText;
+  if (filtered.flaggedTerms.length) notifyStaffChatFlag(users, user, room, originalText, text, filtered.severe);
 
   messages.push({
     id: crypto.randomUUID(),
@@ -3345,6 +3403,7 @@ app.post("/api/chat", async (req, res) => {
     username: user.username,
     avatar: user.avatar,
     text,
+    filtered: filtered.flaggedTerms.length > 0,
     createdAt: new Date().toISOString()
   });
   stampRequestDevice(user, req);
