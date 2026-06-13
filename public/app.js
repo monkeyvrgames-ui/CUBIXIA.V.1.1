@@ -5911,7 +5911,7 @@ function createThreeWorld(THREE, gameId, gameSettings = {}) {
     camera.updateProjectionMatrix();
     renderer.setSize(mount.clientWidth, mount.clientHeight);
   };
-  runtime = { scene, camera, renderer, mount, keys, controls, pointerLockHandler, otherMeshes: new Map(), frame: 0, pollAt: 0, clock: new THREE.Clock() };
+  runtime = { scene, camera, renderer, mount, keys, controls, pointerLockHandler, otherMeshes: new Map(), frame: 0, pollAt: 0, worldRequestPending: false, clock: new THREE.Clock() };
   return runtime;
 }
 
@@ -7672,8 +7672,14 @@ function setupGameChat(base, user, gameId) {
     status.dataset.tone = tone;
   };
   const load = async () => {
-    const data = await api(`/api/chat?room=${encodeURIComponent(room)}`).catch(() => ({ messages: [] }));
-    renderMessages(data.messages);
+    if (base.chatRequestPending) return;
+    base.chatRequestPending = true;
+    try {
+      const data = await api(`/api/chat?room=${encodeURIComponent(room)}`).catch(() => ({ messages: [] }));
+      renderMessages(data.messages);
+    } finally {
+      base.chatRequestPending = false;
+    }
   };
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -7709,7 +7715,7 @@ function setupGameChat(base, user, gameId) {
     }
   });
   panel.addEventListener("click", () => form.querySelector("input").focus());
-  runtime.chatInterval = setInterval(load, 1800);
+  runtime.chatInterval = setInterval(load, 700);
   load();
 }
 
@@ -7797,7 +7803,9 @@ function leaveCurrentGameQuietly(gameId, state = {}) {
 
 async function renderOtherPlayers(THREE, base, user, gameId, player, state) {
   if (Date.now() < base.pollAt) return;
-  base.pollAt = Date.now() + 150;
+  if (base.worldRequestPending) return;
+  base.pollAt = Date.now() + 120;
+  base.worldRequestPending = true;
   const velocity = state.lastVelocity || { x: 0, y: 0, z: 0 };
   const data = await api(`/api/world/${gameId}/state`, {
     method: "POST",
@@ -7819,6 +7827,8 @@ async function renderOtherPlayers(THREE, base, user, gameId, player, state) {
     if (error.data?.lockdown) return { players: [], lockdown: error.data.lockdown, user: error.data.user };
     if (error.message && /deleted|unavailable|cannot be played/i.test(error.message)) return { players: [], deleted: true, error: error.message };
     return { players: null, transientError: true };
+  }).finally(() => {
+    base.worldRequestPending = false;
   });
   if (data.transientError || !Array.isArray(data.players)) return;
   if (data.deleted) {
@@ -7842,10 +7852,20 @@ async function renderOtherPlayers(THREE, base, user, gameId, player, state) {
     people.innerHTML = data.players.map((entry) => `<div class="person-row">${avatar(entry, "tiny")}<div><strong>${escapeHtml(entry.username)}</strong><small>@${escapeHtml(entry.username)} ${entry.role ? `| ${entry.role}` : ""}</small></div><button>Add Friend</button></div>`).join("");
   }
   const seen = new Set(data.players.map((entry) => entry.id));
+  const nowSeenAt = performance.now();
   base.otherMeshes.forEach((mesh, id) => {
-    if (id === user.id || !seen.has(id)) {
+    if (id === user.id) {
       base.scene.remove(mesh);
       base.otherMeshes.delete(id);
+      return;
+    }
+    if (!seen.has(id)) {
+      mesh.userData.missingSince ||= nowSeenAt;
+      mesh.userData.serverMoving = false;
+      if (nowSeenAt - mesh.userData.missingSince > 12000) {
+        base.scene.remove(mesh);
+        base.otherMeshes.delete(id);
+      }
     }
   });
   data.players.filter((entry) => entry.id !== user.id).forEach((entry) => {
@@ -7858,11 +7878,14 @@ async function renderOtherPlayers(THREE, base, user, gameId, player, state) {
       mesh.position.set(entry.worldState.x, entry.worldState.y, entry.worldState.z);
     }
     mesh.userData.username = entry.username;
-    const previousTarget = mesh.userData.targetPosition?.clone?.() || mesh.position.clone();
+    mesh.userData.missingSince = 0;
+    mesh.userData.lastSeenAt = nowSeenAt;
+    const previousTarget = mesh.userData.renderTarget?.clone?.() || mesh.userData.targetPosition?.clone?.() || mesh.position.clone();
     const nextTarget = new THREE.Vector3(entry.worldState.x, entry.worldState.y, entry.worldState.z);
     const receivedAt = performance.now();
     mesh.userData.previousTarget = previousTarget;
     mesh.userData.targetPosition = nextTarget;
+    mesh.userData.renderTarget = nextTarget.clone();
     mesh.userData.serverVelocity = new THREE.Vector3(
       Number(entry.worldState.vx || 0),
       Number(entry.worldState.vy || 0),
@@ -8132,12 +8155,12 @@ function animateOtherPlayers(base) {
   base.otherMeshes?.forEach((mesh) => {
     if (!mesh.userData.targetPosition) return;
     const before = mesh.position.clone();
-    const age = Math.min(420, Math.max(0, performance.now() - Number(mesh.userData.lastWorldUpdate || performance.now())));
-    const predicted = mesh.userData.targetPosition.clone().add((mesh.userData.serverVelocity || new THREE_CACHE.Vector3()).clone().multiplyScalar(age / 16.67));
+    const age = Math.min(260, Math.max(0, performance.now() - Number(mesh.userData.lastWorldUpdate || performance.now())));
+    const predicted = mesh.userData.targetPosition.clone().add((mesh.userData.serverVelocity || new THREE_CACHE.Vector3()).clone().multiplyScalar(age / 18));
     const distance = mesh.position.distanceTo(predicted);
-    if (distance > 8) mesh.position.copy(mesh.userData.targetPosition);
-    else mesh.position.lerp(predicted, distance > 2 ? 0.42 : 0.22);
-    mesh.rotation.y = lerpAngle(mesh.rotation.y, mesh.userData.targetRot || 0, 0.24);
+    if (distance > 16) mesh.position.copy(mesh.userData.targetPosition);
+    else mesh.position.lerp(predicted, distance > 4 ? 0.2 : 0.12);
+    mesh.rotation.y = lerpAngle(mesh.rotation.y, mesh.userData.targetRot || 0, 0.16);
     const moving = Boolean(mesh.userData.serverMoving) || mesh.position.distanceTo(before) > 0.002;
     animateAvatar(mesh, moving, Boolean(mesh.userData.serverJumping) || mesh.position.y > 0.82);
   });

@@ -911,13 +911,13 @@ function isUserOnline(user) {
   const lastOnline = Date.parse(user.lastOnline || "");
   const recentlySeen = Number.isFinite(lastOnline) && Date.now() - lastOnline < 90 * 1000;
   const worldUpdated = Number(user.worldState?.updatedAt || 0);
-  const activeWorld = Boolean(user.currentGame && worldUpdated && Date.now() - worldUpdated < 30 * 1000);
+  const activeWorld = Boolean(user.currentGame && worldUpdated && Date.now() - worldUpdated < 120 * 1000);
   return Boolean(user.online && (recentlySeen || activeWorld));
 }
 
 function isUserInGame(user, gameId = "") {
   const worldUpdated = Number(user?.worldState?.updatedAt || 0);
-  const freshWorld = worldUpdated && Date.now() - worldUpdated < 30 * 1000;
+  const freshWorld = worldUpdated && Date.now() - worldUpdated < 120 * 1000;
   return Boolean(
     user?.currentGame &&
     user?.worldState &&
@@ -2246,7 +2246,7 @@ app.get("/health", (_req, res) => {
   res.json({
     ok: true,
     app: "CUBIXIA",
-    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.1.7",
+    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.1.8",
     twoStepSkipped: SKIP_TWO_STEP_FOR_NOW,
     mode: process.env.CUBIXIA_DESKTOP ? "desktop-local-server" : "shared-server",
     gmailReady: gmail.ready,
@@ -2262,7 +2262,7 @@ app.get("/health/email", async (_req, res) => {
   res.json({
     ok: true,
     app: "CUBIXIA",
-    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.1.7",
+    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.1.8",
     twoStepSkipped: SKIP_TWO_STEP_FOR_NOW,
     gmailReady: gmail.ready,
     gmailUserSet: gmail.userSet,
