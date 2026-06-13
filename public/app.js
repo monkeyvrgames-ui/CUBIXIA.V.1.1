@@ -4783,15 +4783,24 @@ async function bindChat() {
   const list = document.querySelector("#chatMessages");
   const load = async () => {
     const data = await api("/api/chat?room=global");
-    list.innerHTML = data.messages.map((message) => `<div class="chat-line"><strong>${escapeHtml(message.username)}</strong><span>${escapeHtml(message.text)}</span></div>`).join("") || `<p class="empty">No messages yet.</p>`;
+    list.innerHTML = data.messages.map((message) => `<div class="chat-line ${message.filtered ? "filtered" : ""}"><strong>${escapeHtml(message.username)}${message.filtered ? " <small>filtered</small>" : ""}</strong><span>${escapeHtml(message.text)}</span></div>`).join("") || `<p class="empty">No messages yet.</p>`;
     list.scrollTop = list.scrollHeight;
   };
   await load();
   runtime = runtime || {};
   runtime.chatInterval = setInterval(load, 2500);
-  document.querySelector("#chatForm").addEventListener("submit", async (event) => {
+  const form = document.querySelector("#chatForm");
+  const input = form.querySelector("input[name='text']");
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      form.requestSubmit();
+    }
+  });
+  form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const text = new FormData(event.currentTarget).get("text");
+    if (!String(text || "").trim()) return;
     await api("/api/chat", { method: "POST", body: JSON.stringify({ room: "global", text }) });
     event.currentTarget.reset();
     await load();
@@ -7652,8 +7661,8 @@ function setupGameChat(base, user, gameId) {
   const renderMessages = (messages = []) => {
     base.chatMessages = messages;
     list.innerHTML = messages.slice(-8).map((message) => {
-      const lineClass = message.staff ? "staff-announce" : "";
-      return `<div class="${lineClass}"><strong>${escapeHtml(message.username)}</strong> ${escapeHtml(message.text)}</div>`;
+      const lineClass = [message.staff ? "staff-announce" : "", message.filtered ? "filtered" : ""].filter(Boolean).join(" ");
+      return `<div class="${lineClass}"><strong>${escapeHtml(message.username)}${message.filtered ? " <small>filtered</small>" : ""}</strong> ${escapeHtml(message.text)}</div>`;
     }).join("");
     list.scrollTop = list.scrollHeight;
   };
@@ -7690,7 +7699,14 @@ function setupGameChat(base, user, gameId) {
     }
     input.value = "";
     await load();
-    panel.classList.remove("hidden");
+    input.blur();
+    panel.classList.add("hidden");
+  });
+  form.querySelector("input").addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      form.requestSubmit();
+    }
   });
   panel.addEventListener("click", () => form.querySelector("input").focus());
   runtime.chatInterval = setInterval(load, 1800);

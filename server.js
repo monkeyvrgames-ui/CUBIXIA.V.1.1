@@ -24,9 +24,11 @@ const STUDIO_FILE = path.join(DATA_DIR, "studio-games.json");
 const CONTENT_FILE = path.join(DATA_DIR, "content-state.json");
 const DESKTOP_DATA_MARKER_FILE = path.join(DATA_DIR, "desktop-data-version.txt");
 const TWO_STEP_DEVICE_COOKIE = "cubixia_2fa_device";
+const CUBIXIA_DEVICE_COOKIE = "cubixia_device";
 const TWO_STEP_REMEMBER_MS = 30 * 24 * 60 * 60 * 1000;
 const AUTH_COOKIE = "cubixia_auth";
 const AUTH_REMEMBER_MS = 365 * 24 * 60 * 60 * 1000;
+const DEVICE_REMEMBER_MS = 2 * 365 * 24 * 60 * 60 * 1000;
 const SKIP_TWO_STEP_FOR_NOW = process.env.CUBIXIA_SKIP_TWO_STEP !== "false";
 let userWriteQueue = Promise.resolve();
 let chatWriteQueue = Promise.resolve();
@@ -223,6 +225,19 @@ app.use(
     }
   })
 );
+app.use((req, res, next) => {
+  const cookies = parseCookies(req);
+  let token = String(cookies[CUBIXIA_DEVICE_COOKIE] || "");
+  if (!/^[a-f0-9]{48,96}$/i.test(token)) {
+    token = crypto.randomBytes(32).toString("hex");
+    res.cookie(CUBIXIA_DEVICE_COOKIE, token, {
+      ...cookieOptions(DEVICE_REMEMBER_MS),
+      expires: new Date(Date.now() + DEVICE_REMEMBER_MS)
+    });
+  }
+  req.cubixiaDeviceToken = token;
+  next();
+});
 app.use(express.static(path.join(__dirname, "public")));
 app.use("/vendor/three/addons", express.static(path.join(__dirname, "node_modules", "three", "examples", "jsm")));
 app.use("/vendor/three", express.static(path.join(__dirname, "node_modules", "three", "build")));
@@ -986,8 +1001,10 @@ function activeIpBanForRequest(req, users) {
     const active = records.find((record) => {
       const until = Number(record.until || user.banUntil || 0);
       const timeActive = !until || until > now;
-      const deviceMatches = record.deviceHash ? record.deviceHash === deviceHash : true;
-      return timeActive && record.ipHash === ipHash && deviceMatches;
+      const legacyDeviceHash = hashDeviceToken(`device:${requestIp(req)}|${requestUserAgent(req)}`);
+      const ipMatches = record.ipHash && record.ipHash === ipHash;
+      const deviceMatches = record.deviceHash && (record.deviceHash === deviceHash || record.deviceHash === legacyDeviceHash);
+      return timeActive && (ipMatches || deviceMatches);
     });
     if (active) {
       return {
@@ -1426,7 +1443,9 @@ function requestIpHash(req) {
 }
 
 function requestDeviceHash(req) {
-  return hashDeviceToken(`device:${requestIp(req)}|${requestUserAgent(req)}`);
+  const cookieDevice = String(parseCookies(req)[CUBIXIA_DEVICE_COOKIE] || req.cubixiaDeviceToken || "");
+  if (cookieDevice) return hashDeviceToken(`device-cookie:${cookieDevice}`);
+  return hashDeviceToken(`device:${requestUserAgent(req)}`);
 }
 
 function stampRequestDevice(user, req) {
@@ -2227,7 +2246,7 @@ app.get("/health", (_req, res) => {
   res.json({
     ok: true,
     app: "CUBIXIA",
-    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.1.6",
+    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.1.7",
     twoStepSkipped: SKIP_TWO_STEP_FOR_NOW,
     mode: process.env.CUBIXIA_DESKTOP ? "desktop-local-server" : "shared-server",
     gmailReady: gmail.ready,
@@ -2243,7 +2262,7 @@ app.get("/health/email", async (_req, res) => {
   res.json({
     ok: true,
     app: "CUBIXIA",
-    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.1.6",
+    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.1.7",
     twoStepSkipped: SKIP_TWO_STEP_FOR_NOW,
     gmailReady: gmail.ready,
     gmailUserSet: gmail.userSet,

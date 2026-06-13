@@ -2348,9 +2348,10 @@ body[data-theme="dark"] .chat-audit-results small {
 }
 
 .moderation-actions {
-  display: grid;
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
   gap: 10px;
-  grid-template-columns: 1fr auto;
 }
 
 .moderation-card button {
@@ -2359,7 +2360,18 @@ body[data-theme="dark"] .chat-audit-results small {
   border-radius: 10px;
   color: white;
   font-weight: 900;
+  line-height: 1.1;
+  min-height: 46px;
   padding: 13px 16px;
+}
+
+.moderation-actions #ackModeration {
+  flex: 1 1 280px;
+}
+
+.moderation-actions #logoutModeration {
+  flex: 0 0 auto;
+  min-width: 120px;
 }
 
 .moderation-card button:disabled {
@@ -2378,6 +2390,7 @@ body[data-theme="dark"] .chat-audit-results small {
 @media (max-width: 640px) {
   .moderation-grid,
   .moderation-actions {
+    display: grid;
     grid-template-columns: 1fr;
   }
 }
@@ -4233,8 +4246,8 @@ body[data-theme="dark"] .chat-audit-results small {
 }
 
 .chat-messages {
-  background: #f1f4f8;
-  border: 1px solid #dce2e9;
+  background: rgba(8, 19, 33, .94);
+  border: 1px solid rgba(148, 163, 184, .36);
   border-radius: 10px;
   display: grid;
   gap: 8px;
@@ -4244,12 +4257,37 @@ body[data-theme="dark"] .chat-audit-results small {
 }
 
 .chat-line {
-  background: white;
-  border: 1px solid #dfe5ec;
+  background: #142438;
+  border: 1px solid rgba(148, 163, 184, .28);
   border-radius: 9px;
+  color: #eaf4ff;
   display: grid;
   gap: 3px;
   padding: 10px;
+}
+
+.chat-line strong {
+  color: #9fd7ff;
+}
+
+.chat-line span {
+  color: #f4f8ff;
+  font-weight: 800;
+}
+
+.chat-line.filtered,
+.game-chat #gameChatMessages div.filtered {
+  border: 1px solid rgba(255, 209, 102, .45);
+}
+
+.chat-line small,
+.game-chat #gameChatMessages small {
+  background: rgba(255, 209, 102, .18);
+  border-radius: 999px;
+  color: #ffd166;
+  font-size: 11px;
+  margin-left: 6px;
+  padding: 2px 6px;
 }
 
 .chat-form {
@@ -4257,6 +4295,35 @@ body[data-theme="dark"] .chat-audit-results small {
   gap: 8px;
   grid-template-columns: 1fr auto;
   margin-top: 10px;
+}
+
+.chat-form input {
+  background: #182b43;
+  border: 1px solid rgba(148, 163, 184, .45);
+  border-radius: 8px;
+  color: #f4f8ff;
+  font-weight: 850;
+  outline: 0;
+  padding: 12px;
+}
+
+.chat-form input::placeholder {
+  color: #96a8bd;
+  opacity: 1;
+}
+
+.chat-form input:focus {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, .16);
+}
+
+.chat-form button {
+  background: #315cff;
+  border: 0;
+  border-radius: 8px;
+  color: #fff;
+  font-weight: 950;
+  padding: 0 18px;
 }
 
 .game-chat {
