@@ -837,7 +837,7 @@ function normalizeUser(user) {
     status: user.status || "",
     lastOnline: user.lastOnline || new Date().toISOString(),
     online: Boolean(user.online),
-    currentGame: user.currentGame || "",
+    currentGame: isUserInGame(user) ? user.currentGame || "" : "",
     banned: Boolean(user.banned),
     permanentBan: Boolean(user.permanentBan),
     ipBanned: Boolean(user.ipBanned),
@@ -888,6 +888,27 @@ function hasOwnerAccess(user) {
 
 function canModerate(user) {
   return Boolean(user && (hasOwnerAccess(user) || user.role === "admin" || user.role === "mod"));
+}
+
+function isUserOnline(user) {
+  if (!user || user.banned) return false;
+  const lastOnline = Date.parse(user.lastOnline || "");
+  const recentlySeen = Number.isFinite(lastOnline) && Date.now() - lastOnline < 90 * 1000;
+  const worldUpdated = Number(user.worldState?.updatedAt || 0);
+  const activeWorld = Boolean(user.currentGame && worldUpdated && Date.now() - worldUpdated < 30 * 1000);
+  return Boolean(user.online && (recentlySeen || activeWorld));
+}
+
+function isUserInGame(user, gameId = "") {
+  const worldUpdated = Number(user?.worldState?.updatedAt || 0);
+  const freshWorld = worldUpdated && Date.now() - worldUpdated < 30 * 1000;
+  return Boolean(
+    user?.currentGame &&
+    user?.worldState &&
+    freshWorld &&
+    (!gameId || user.worldState.gameId === gameId) &&
+    !user.banned
+  );
 }
 
 function canTimeout(user) {
@@ -1119,8 +1140,8 @@ function compactUser(user) {
     bio: user.bio,
     createdAt: user.createdAt,
     lastOnline: user.lastOnline,
-    online: Boolean(user.online),
-    currentGame: user.currentGame || "",
+    online: isUserOnline(user),
+    currentGame: isUserInGame(user) ? user.currentGame || "" : "",
     badges: user.badges || [],
     avatarStyle: user.avatarStyle,
     equipped,
@@ -1156,8 +1177,8 @@ function publicUser(user, users = []) {
       bio: "",
       createdAt: "",
       lastOnline: new Date(Date.now() - 1000 * 60 * 23).toISOString(),
-      online: Math.random() > 0.4,
-      currentGame: Math.random() > 0.55 ? "Cubixia: Survival" : "",
+      online: false,
+      currentGame: "",
       badges: []
     };
   });
@@ -1207,6 +1228,14 @@ function requireSession(req, res) {
     return null;
   }
   return req.session.userId;
+}
+
+async function requireSessionOrRemembered(req, res) {
+  if (req.session?.userId) return req.session.userId;
+  const restored = await restoreRememberedLogin(req, res);
+  if (restored?.user?.id) return restored.user.id;
+  res.status(401).json({ error: "Not logged in." });
+  return null;
 }
 
 function requireSessionUser(users, userId, res) {
@@ -1880,7 +1909,7 @@ app.get("/api/lockdown", async (req, res) => {
 });
 
 app.post("/api/admin/lockdown", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
   const users = await readUsers();
   const owner = requireSessionUser(users, userId, res);
@@ -1937,7 +1966,7 @@ app.post("/api/admin/lockdown", async (req, res) => {
 });
 
 app.post("/api/notifications/clear", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
 
   const users = await readUsers();
@@ -1958,7 +1987,7 @@ app.get("/api/games", async (_req, res) => {
 });
 
 app.post("/api/games/:gameId/reaction", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
 
   const users = await readUsers();
@@ -2040,7 +2069,7 @@ app.post("/api/games/:gameId/reaction", async (req, res) => {
 });
 
 app.get("/api/studio/projects", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
 
   const users = await readUsers();
@@ -2054,7 +2083,7 @@ app.get("/api/studio/projects", async (req, res) => {
 });
 
 app.post("/api/studio/save", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
 
   const users = await readUsers();
@@ -2084,7 +2113,7 @@ app.post("/api/studio/save", async (req, res) => {
 });
 
 app.post("/api/studio/publish", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
 
   const users = await readUsers();
@@ -2121,7 +2150,7 @@ app.get("/api/groups", async (req, res) => {
 });
 
 app.post("/api/groups/join", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
 
   const groupId = String(req.body.groupId || "");
@@ -2146,7 +2175,7 @@ app.post("/api/groups/join", async (req, res) => {
 });
 
 app.post("/api/groups/update", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
 
   const users = await readUsers();
@@ -2197,7 +2226,7 @@ app.get("/health", (_req, res) => {
   res.json({
     ok: true,
     app: "CUBIXIA",
-    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.1.3",
+    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.1.5",
     twoStepSkipped: SKIP_TWO_STEP_FOR_NOW,
     mode: process.env.CUBIXIA_DESKTOP ? "desktop-local-server" : "shared-server",
     gmailReady: gmail.ready,
@@ -2213,7 +2242,7 @@ app.get("/health/email", async (_req, res) => {
   res.json({
     ok: true,
     app: "CUBIXIA",
-    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.1.3",
+    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.1.5",
     twoStepSkipped: SKIP_TWO_STEP_FOR_NOW,
     gmailReady: gmail.ready,
     gmailUserSet: gmail.userSet,
@@ -2226,7 +2255,7 @@ app.get("/health/email", async (_req, res) => {
 });
 
 app.get("/api/users/search", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
 
   const query = String(req.query.username || "").trim().toLowerCase();
@@ -2246,7 +2275,7 @@ app.get("/api/users/search", async (req, res) => {
 });
 
 app.post("/api/friend-request", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
 
   const username = String(req.body.username || "").trim();
@@ -2276,40 +2305,52 @@ app.post("/api/friend-request", async (req, res) => {
 });
 
 app.post("/api/friend-request/respond", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
 
   const from = String(req.body.from || "").trim();
+  const requestId = String(req.body.requestId || "").trim();
   const action = req.body.action === "accept" ? "accept" : "decline";
   const users = await readUsers();
   const current = requireSessionUser(users, userId, res);
   if (!current) return;
-  const sender = findUserByUsername(users, from);
+  const requestNote = (current.notifications || []).find((note) =>
+    note.type === "friend_request" &&
+    ((requestId && note.id === requestId) || String(note.from || "").toLowerCase() === from.toLowerCase())
+  );
+  const senderName = requestNote?.from || from;
+  const sender = findUserByUsername(users, senderName);
+  if (!sender) {
+    current.incomingRequests = (current.incomingRequests || []).filter((name) => name.toLowerCase() !== senderName.toLowerCase());
+    current.notifications = (current.notifications || []).filter((note) => note.id !== requestId && String(note.from || "").toLowerCase() !== senderName.toLowerCase());
+    await writeUsers(users);
+    return res.status(404).json({ error: "That friend request came from an account that is no longer on this CUBIXIA server.", user: publicUser(current, users) });
+  }
 
-  current.incomingRequests = current.incomingRequests.filter((name) => name.toLowerCase() !== from.toLowerCase());
-  current.notifications = current.notifications.filter((note) => note.from.toLowerCase() !== from.toLowerCase());
+  current.incomingRequests = (current.incomingRequests || []).filter((name) => name.toLowerCase() !== sender.username.toLowerCase());
+  current.notifications = (current.notifications || []).filter((note) =>
+    note.id !== requestId && !(note.type === "friend_request" && String(note.from || "").toLowerCase() === sender.username.toLowerCase())
+  );
 
-  if (sender) {
-    sender.outgoingRequests = sender.outgoingRequests.filter((name) => name.toLowerCase() !== current.username.toLowerCase());
-    if (action === "accept") {
-      if (!current.friends.includes(sender.username)) current.friends.unshift(sender.username);
-      if (!sender.friends.includes(current.username)) sender.friends.unshift(current.username);
-      sender.notifications.unshift({
-        id: crypto.randomUUID(),
-        type: "friend_accept",
-        from: current.username,
-        text: `${current.username} accepted your friend request.`,
-        createdAt: new Date().toISOString()
-      });
-    }
+  sender.outgoingRequests = (sender.outgoingRequests || []).filter((name) => name.toLowerCase() !== current.username.toLowerCase());
+  if (action === "accept") {
+    if (!(current.friends || []).some((name) => name.toLowerCase() === sender.username.toLowerCase())) current.friends.unshift(sender.username);
+    if (!(sender.friends || []).some((name) => name.toLowerCase() === current.username.toLowerCase())) sender.friends.unshift(current.username);
+    sender.notifications.unshift({
+      id: crypto.randomUUID(),
+      type: "friend_accept",
+      from: current.username,
+      text: `${current.username} accepted your friend request.`,
+      createdAt: new Date().toISOString()
+    });
   }
 
   await writeUsers(users);
-  res.json({ user: publicUser(current, users) });
+  res.json({ user: publicUser(current, users), sender: compactUser(sender), relationship: action === "accept" ? "friends" : "declined" });
 });
 
 app.post("/api/profile", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
 
   await readContentState();
@@ -2339,7 +2380,7 @@ app.get("/api/marketplace", async (req, res) => {
 });
 
 app.post("/api/marketplace/buy", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
 
   const itemId = String(req.body.itemId || "");
@@ -2371,7 +2412,7 @@ app.post("/api/marketplace/buy", async (req, res) => {
 });
 
 app.post("/api/cubbux/checkout", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
 
   const packages = {
@@ -2440,7 +2481,7 @@ function passesLuhn(number) {
 }
 
 app.post("/api/settings/game", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
 
   const users = await readUsers();
@@ -2459,7 +2500,7 @@ app.post("/api/settings/game", async (req, res) => {
 });
 
 app.post("/api/settings/account", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
 
   const users = await readUsers();
@@ -2491,7 +2532,7 @@ app.post("/api/settings/account", async (req, res) => {
 });
 
 app.post("/api/settings/password", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
 
   const currentPassword = String(req.body.currentPassword || "");
@@ -2512,7 +2553,7 @@ app.post("/api/settings/password", async (req, res) => {
 });
 
 app.post("/api/settings/two-step", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
 
   const users = await readUsers();
@@ -2562,7 +2603,7 @@ function awardPlatformXp(user, amount) {
 }
 
 app.post("/api/progress", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
 
   const users = await readUsers();
@@ -2598,7 +2639,7 @@ app.post("/api/progress", async (req, res) => {
 });
 
 app.post("/api/rewards/daily", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
   const users = await readUsers();
   const user = requireSessionUser(users, userId, res);
@@ -2624,7 +2665,7 @@ app.post("/api/rewards/daily", async (req, res) => {
 });
 
 app.post("/api/economy/crate", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
   const users = await readUsers();
   const user = requireSessionUser(users, userId, res);
@@ -2650,7 +2691,7 @@ app.post("/api/economy/crate", async (req, res) => {
 });
 
 app.post("/api/party/create", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
   const users = await readUsers();
   const user = requireSessionUser(users, userId, res);
@@ -2675,7 +2716,7 @@ app.get("/api/world/:gameId", async (req, res) => {
 });
 
 app.post("/api/world/:gameId/state", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
 
   const users = await readUsers();
@@ -2809,7 +2850,7 @@ app.post("/api/world/:gameId/state", async (req, res) => {
 function worldPlayers(users, gameId, viewer = null) {
   const view = viewer?.worldState?.gameId === gameId ? viewer.worldState : null;
   return users
-    .filter((user) => user.worldState?.gameId === gameId && user.currentGame && !user.banned)
+    .filter((user) => isUserInGame(user, gameId))
     .map((user) => {
       const distance = view ? Math.hypot(
         Number(user.worldState.x || 0) - Number(view.x || 0),
@@ -2836,7 +2877,7 @@ async function appendWorldEvent(gameId, event) {
 }
 
 app.post("/api/world/:gameId/action", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
   const users = await readUsers();
   const user = requireSessionUser(users, userId, res);
@@ -2951,7 +2992,7 @@ async function appendRoomMessage(room, message) {
 }
 
 app.post("/api/game-command", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
 
   const parsed = splitCommand(req.body.text || req.body.command);
@@ -3257,7 +3298,7 @@ app.get("/api/chat", async (req, res) => {
 });
 
 app.post("/api/chat", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
 
   const users = await readUsers();
@@ -3313,7 +3354,7 @@ app.post("/api/chat", async (req, res) => {
 });
 
 app.post("/api/report", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
 
   const users = await readUsers();
@@ -3364,7 +3405,7 @@ app.post("/api/report", async (req, res) => {
 });
 
 app.get("/api/moderation/reports", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
 
   const users = await readUsers();
@@ -3376,7 +3417,7 @@ app.get("/api/moderation/reports", async (req, res) => {
 });
 
 app.post("/api/moderation/reports/delete", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
 
   const users = await readUsers();
@@ -3400,7 +3441,7 @@ app.post("/api/moderation/reports/delete", async (req, res) => {
 });
 
 app.get("/api/moderation/content", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
 
   const users = await readUsers();
@@ -3420,7 +3461,7 @@ app.get("/api/moderation/content", async (req, res) => {
 });
 
 app.post("/api/moderation/content/delete", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
 
   const users = await readUsers();
@@ -3477,7 +3518,7 @@ app.post("/api/moderation/content/delete", async (req, res) => {
 });
 
 app.post("/api/moderation/content/restore", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
 
   const users = await readUsers();
@@ -3499,7 +3540,7 @@ app.post("/api/moderation/content/restore", async (req, res) => {
 });
 
 app.post("/api/moderation/follow", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
 
   const users = await readUsers();
@@ -3515,7 +3556,7 @@ app.post("/api/moderation/follow", async (req, res) => {
 });
 
 app.get("/api/moderation/chat-audit", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
 
   const users = await readUsers();
@@ -3534,7 +3575,7 @@ app.get("/api/moderation/chat-audit", async (req, res) => {
 });
 
 app.post("/api/moderation/action", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
 
   const users = await readUsers();
@@ -3612,7 +3653,7 @@ app.post("/api/moderation/action", async (req, res) => {
 });
 
 app.post("/api/moderation/ack", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
 
   const users = await readUsers();
@@ -3643,7 +3684,7 @@ app.post("/api/moderation/ack", async (req, res) => {
 });
 
 app.post("/api/admin/ban", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
 
   const users = await readUsers();
@@ -3690,7 +3731,7 @@ app.post("/api/admin/ban", async (req, res) => {
 });
 
 app.post("/api/admin/grant-cubbux", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
 
   const users = await readUsers();
@@ -3721,7 +3762,7 @@ app.post("/api/admin/grant-cubbux", async (req, res) => {
 });
 
 app.post("/api/admin/take-cubbux", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
 
   const users = await readUsers();
@@ -3752,7 +3793,7 @@ app.post("/api/admin/take-cubbux", async (req, res) => {
 });
 
 app.post("/api/admin/role", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
 
   const users = await readUsers();
@@ -3788,7 +3829,7 @@ app.post("/api/admin/role", async (req, res) => {
 });
 
 app.post("/api/admin/warn", async (req, res) => {
-  const userId = requireSession(req, res);
+  const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
 
   const users = await readUsers();
@@ -3825,3 +3866,6 @@ ensureStore().then(() => {
     console.log(`LAN/dev access: http://0.0.0.0:${PORT}`);
   });
 });
+
+
+

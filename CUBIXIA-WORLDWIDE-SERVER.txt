@@ -1,0 +1,15 @@
+﻿CUBIXIA Worldwide Mode
+
+This file points the desktop EXE at the shared CUBIXIA server:
+https://cubixia-1.onrender.com
+
+Keep cubixia-server.json beside CUBIXIA.exe when sending the game to testers.
+Players using this shared server can:
+- create accounts visible to everyone on the same server
+- send and receive friend requests
+- join the same games
+- see each other's avatars in 3D games
+- receive owner/admin/mod actions
+- be affected by owner lockdown and content moderation
+
+To test private local mode instead, start the EXE with CUBIXIA_FORCE_LOCAL=true or replace this file with a hostServer config.

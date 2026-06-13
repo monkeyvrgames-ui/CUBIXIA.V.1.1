@@ -3559,7 +3559,7 @@ function notificationList(user) {
   return `${visible.map((note) => `
     <article class="notice">
       <p>${escapeHtml(note.text)}</p>
-      ${note.type === "friend_request" ? `<div><button data-respond="accept" data-from="${escapeHtml(note.from)}">Accept</button><button data-respond="decline" data-from="${escapeHtml(note.from)}">Decline</button></div>` : ""}
+      ${note.type === "friend_request" ? `<div><button data-respond="accept" data-from="${escapeHtml(note.from)}" data-request-id="${escapeHtml(note.id || "")}">Accept</button><button data-respond="decline" data-from="${escapeHtml(note.from)}" data-request-id="${escapeHtml(note.id || "")}">Decline</button></div>` : ""}
     </article>
   `).join("")}${hiddenCount ? `<p class="notice-more">${hiddenCount} older notification${hiddenCount === 1 ? "" : "s"} hidden.</p>` : ""}`;
 }
@@ -3725,9 +3725,6 @@ function showBanModal() {
 
 function bindSocial() {
   document.querySelector("#openSearch")?.addEventListener("click", () => showFriendSearch());
-  document.querySelectorAll("[data-respond]").forEach((button) => {
-    button.addEventListener("click", () => respondRequest(button.dataset.from, button.dataset.respond));
-  });
   document.querySelectorAll("[data-friend-menu]").forEach((button) => {
     button.addEventListener("click", () => showFriendMenu(button.dataset.friendMenu));
   });
@@ -4634,10 +4631,34 @@ async function submitReport(event) {
 
 async function respondRequest(from, action) {
   const data = await api("/api/friend-request/respond", { method: "POST", body: JSON.stringify({ from, action }) });
-  hub(data.user);
+  const fresh = await api("/api/me").catch(() => data);
+  hub(fresh.user || data.user);
 }
 
 function bindNotificationActions() {
+  document.querySelectorAll("[data-respond]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const original = button.textContent;
+      button.disabled = true;
+      button.textContent = button.dataset.respond === "accept" ? "Accepting..." : "Declining...";
+      try {
+        const data = await api("/api/friend-request/respond", {
+          method: "POST",
+          body: JSON.stringify({
+            from: button.dataset.from,
+            action: button.dataset.respond,
+            requestId: button.dataset.requestId || ""
+          })
+        });
+        const fresh = await api("/api/me").catch(() => data);
+        hub(fresh.user || data.user);
+      } catch (error) {
+        button.disabled = false;
+        button.textContent = error.message || original;
+      }
+    });
+  });
+
   const clearButton = document.querySelector("#clearNotifications");
   if (!clearButton) return;
   clearButton.addEventListener("click", async () => {
