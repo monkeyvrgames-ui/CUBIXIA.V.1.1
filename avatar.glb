@@ -2348,9 +2348,10 @@ body[data-theme="dark"] .chat-audit-results small {
 }
 
 .moderation-actions {
-  display: grid;
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
   gap: 10px;
-  grid-template-columns: 1fr auto;
 }
 
 .moderation-card button {
@@ -2359,7 +2360,18 @@ body[data-theme="dark"] .chat-audit-results small {
   border-radius: 10px;
   color: white;
   font-weight: 900;
+  line-height: 1.1;
+  min-height: 46px;
   padding: 13px 16px;
+}
+
+.moderation-actions #ackModeration {
+  flex: 1 1 280px;
+}
+
+.moderation-actions #logoutModeration {
+  flex: 0 0 auto;
+  min-width: 120px;
 }
 
 .moderation-card button:disabled {
@@ -2378,6 +2390,7 @@ body[data-theme="dark"] .chat-audit-results small {
 @media (max-width: 640px) {
   .moderation-grid,
   .moderation-actions {
+    display: grid;
     grid-template-columns: 1fr;
   }
 }
@@ -5591,6 +5604,7 @@ body[data-theme="dark"] .staff-command-guide span {
 }
 
 .service-actions,
+.studio-axis-actions,
 .studio-side-scale {
   display: grid;
   gap: 6px;
@@ -5599,6 +5613,7 @@ body[data-theme="dark"] .staff-command-guide span {
 }
 
 .service-actions button,
+.studio-axis-actions button,
 .studio-side-scale button {
   background: #edf2f7;
   border: 1px solid #d5dde8;

@@ -1941,7 +1941,7 @@
         "createdAt": "2026-06-10T00:59:07.424Z"
       }
     ],
-    "lastOnline": "2026-06-12T01:57:24.398Z",
+    "lastOnline": "2026-06-12T01:57:29.403Z",
     "currentGame": "",
     "banned": false,
     "banReason": "",
@@ -2125,7 +2125,8 @@
       "giantmode": true,
       "fireworkUntil": 1781129406273
     },
-    "action_interact": 1781133673718
+    "action_interact": 1781133673718,
+    "authTokens": []
   },
   {
     "id": "7d239fc5-655c-4916-8ced-f7b4ad2301cb",
@@ -2758,7 +2759,8 @@
     "chatSlowmodeAt": {
       "game:coaster-tycoon": 1781081148622
     },
-    "action_interact": 1781129405715
+    "action_interact": 1781129405715,
+    "authTokens": []
   },
   {
     "id": "82842593-7c40-4977-b107-22e5a8fc32af",
@@ -3058,7 +3060,8 @@
       "Smoke"
     ],
     "party": null,
-    "status": ""
+    "status": "",
+    "authTokens": []
   },
   {
     "id": "784a5410-893d-4bd8-a942-30112240f71c",
@@ -3358,7 +3361,8 @@
       "Smoke"
     ],
     "party": null,
-    "status": ""
+    "status": "",
+    "authTokens": []
   },
   {
     "id": "c4c02fae-480f-4f1c-93d3-3d334ec13ec6",
@@ -3866,7 +3870,8 @@
       "Smoke"
     ],
     "party": null,
-    "status": ""
+    "status": "",
+    "authTokens": []
   },
   {
     "id": "b26992d0-3814-4362-8ffc-48889c451dff",
@@ -4173,7 +4178,8 @@
       "Smoke"
     ],
     "party": null,
-    "status": ""
+    "status": "",
+    "authTokens": []
   },
   {
     "id": "55e4aaf4-a015-4a57-9745-468f211c7082",
@@ -4510,7 +4516,8 @@
       "Smoke"
     ],
     "party": null,
-    "status": ""
+    "status": "",
+    "authTokens": []
   },
   {
     "id": "d2361f51-5936-4631-a759-c76ebba58fca",
@@ -4846,7 +4853,8 @@
       "Smoke"
     ],
     "party": null,
-    "status": ""
+    "status": "",
+    "authTokens": []
   },
   {
     "id": "aa2d69b5-1cf5-48d1-941c-1bf20ec8875a",
@@ -5146,7 +5154,8 @@
       "Smoke"
     ],
     "party": null,
-    "status": ""
+    "status": "",
+    "authTokens": []
   },
   {
     "id": "a2a9340e-8c48-46fa-88c3-fa245eb7209e",
@@ -5453,7 +5462,8 @@
       "Smoke"
     ],
     "party": null,
-    "status": ""
+    "status": "",
+    "authTokens": []
   },
   {
     "id": "0a74c34d-b1b6-43ef-a966-748c81a12310",
@@ -5753,7 +5763,8 @@
       "Smoke"
     ],
     "party": null,
-    "status": ""
+    "status": "",
+    "authTokens": []
   },
   {
     "id": "57de7499-dd04-46c7-bb96-bf1b914568d2",
@@ -6053,7 +6064,8 @@
       "Smoke"
     ],
     "party": null,
-    "status": ""
+    "status": "",
+    "authTokens": []
   },
   {
     "id": "42501e24-9921-463d-92ec-a4734af17243",
@@ -6362,7 +6374,8 @@
       "Smoke"
     ],
     "party": null,
-    "status": ""
+    "status": "",
+    "authTokens": []
   },
   {
     "id": "289f3041-3d4a-425d-a178-70c290a8a671",
@@ -6673,7 +6686,8 @@
       "Smoke"
     ],
     "party": null,
-    "status": ""
+    "status": "",
+    "authTokens": []
   },
   {
     "id": "fa0aa9b2-c0e7-47a5-b2fc-dc6b1e7171a6",
@@ -6975,7 +6989,8 @@
       "Smoke"
     ],
     "party": null,
-    "status": ""
+    "status": "",
+    "authTokens": []
   },
   {
     "id": "3a60a8c9-89c0-4fce-b32b-1e3479d55892",
@@ -7282,7 +7297,8 @@
       "Smoke"
     ],
     "party": null,
-    "status": ""
+    "status": "",
+    "authTokens": []
   },
   {
     "id": "544c78c7-5fdd-4fe5-9fc0-199154b3a52a",
@@ -7772,7 +7788,8 @@
       "Smoke"
     ],
     "party": null,
-    "status": ""
+    "status": "",
+    "authTokens": []
   },
   {
     "id": "eaabd0ec-46e1-4656-99cb-e273d04d3c20",
@@ -8073,7 +8090,8 @@
       "Smoke"
     ],
     "party": null,
-    "status": ""
+    "status": "",
+    "authTokens": []
   },
   {
     "id": "b3fa6ca8-85d2-4ff8-8848-88e8a6095ca1",
@@ -8395,7 +8413,8 @@
       "progress": "Safe-zone lobby",
       "xp": 0,
       "currency": 0
-    }
+    },
+    "authTokens": []
   },
   {
     "id": "429afa0d-d59b-4787-a4b8-ebbfc271e833",
@@ -8696,7 +8715,8 @@
       "progress": "Safe-zone lobby",
       "xp": 0,
       "currency": 0
-    }
+    },
+    "authTokens": []
   },
   {
     "id": "e81e551e-addc-47ed-a05e-410016648ed2",
@@ -8961,7 +8981,8 @@
       "progress": "Safe-zone lobby",
       "xp": 0,
       "currency": 0
-    }
+    },
+    "authTokens": []
   },
   {
     "id": "4ee3cd79-60c3-4a7c-bc6a-8a03e045e1d7",
@@ -9154,6 +9175,142 @@
       "verifiedAt": 0,
       "rememberedDevices": []
     },
+    "lastPlayed": {
+      "id": "cubixia-survival",
+      "title": "Cubixia: Survival",
+      "progress": "Safe-zone lobby",
+      "xp": 0,
+      "currency": 0
+    },
+    "authTokens": []
+  },
+  {
+    "id": "71feb058-1197-4b69-b78d-3ba0e24af991",
+    "username": "ChatTest283175",
+    "email": "chattest283175@example.com",
+    "passwordHash": "$2a$10$LX4obONr3/xh6FgR6tJgHe.bivAOvWfvkWhhM.UYjdymTXcSkWh9S",
+    "birthMonth": "Jan",
+    "birthDay": "1",
+    "birthYear": "2000",
+    "avatar": "",
+    "createdAt": "2026-06-13T01:56:34.286Z",
+    "online": true,
+    "avatarStyle": {
+      "skin": "#f0d0a7",
+      "shirt": "#2268d8",
+      "pants": "#252b35",
+      "hair": "#7a4a1d",
+      "accessory": "none"
+    },
+    "inventory": [
+      "starter-shirt",
+      "cube-cap",
+      "tycoon-badge-pin"
+    ],
+    "equipped": [
+      "starter-shirt",
+      "cube-cap"
+    ],
+    "cubbux": 125,
+    "transactions": [],
+    "role": "user",
+    "gameSettings": {
+      "cameraSensitivity": 1,
+      "cameraInverted": true,
+      "smoothZoom": true,
+      "firstPersonZoom": true,
+      "cameraFollow": "free"
+    },
+    "settings": {
+      "notifications": {
+        "friendRequests": true,
+        "messages": true,
+        "gameUpdates": true,
+        "moderation": true
+      },
+      "privacy": {
+        "profileVisible": true,
+        "showOnline": true,
+        "allowFriendRequests": true,
+        "allowJoin": true,
+        "allowMessages": true
+      },
+      "browser": {
+        "reduceMotion": false,
+        "showPerformance": false,
+        "theme": "auto",
+        "uiScale": 1
+      }
+    },
+    "groups": [],
+    "bio": "Building my corner of CUBIXIA.",
+    "badges": [
+      "Founder"
+    ],
+    "achievements": [
+      "First Login"
+    ],
+    "friends": [],
+    "incomingRequests": [],
+    "outgoingRequests": [],
+    "notifications": [],
+    "following": [],
+    "gameInteractions": {},
+    "progression": {
+      "level": 1,
+      "xp": 0,
+      "lastDailyAt": 0,
+      "streak": 0,
+      "stats": {
+        "speed": 1,
+        "strength": 1,
+        "luck": 1
+      },
+      "title": "Explorer"
+    },
+    "backpack": [
+      "Starter Map",
+      "Snack",
+      "Smoke"
+    ],
+    "party": null,
+    "status": "",
+    "lastOnline": "2026-06-13T01:56:34.286Z",
+    "currentGame": "",
+    "banned": false,
+    "permanentBan": false,
+    "ipBanned": false,
+    "ipBanRecords": [],
+    "lastIpHash": "508cc0fe26185d71343b0aaa99a7a8c8a45392f278d5f16b37faef9bf114cc58",
+    "lastDeviceHash": "2df637850a6a26e0828d0f0424386b2780fa29401a036b9f2520898399e5f07c",
+    "lastUserAgent": "Mozilla/5.0 (Windows NT; Windows NT 10.0; en-US) WindowsPowerShell/5.1.26100.8655",
+    "banReason": "",
+    "banUntil": 0,
+    "timeoutUntil": 0,
+    "timeoutReason": "",
+    "moderationNotice": null,
+    "worldState": null,
+    "passwordResetCode": "",
+    "passwordResetExpires": 0,
+    "twoStep": {
+      "enabled": true,
+      "codeHash": "",
+      "codeExpires": 0,
+      "attempts": 0,
+      "requestedAt": 0,
+      "lastSentAt": 0,
+      "verifiedAt": 0,
+      "rememberedDevices": []
+    },
+    "authTokens": [
+      {
+        "id": "c7d2f67d-a22d-46d8-96dc-66087786f8fc",
+        "tokenHash": "b222982f16f3ac0565d75670d575511aeb31b5c7d876c4f49105fc911a1a2faa",
+        "createdAt": "2026-06-13T01:56:34.286Z",
+        "lastUsedAt": "2026-06-13T01:56:34.286Z",
+        "expiresAt": 1812851794286
+      }
+    ],
     "lastPlayed": {
       "id": "cubixia-survival",
       "title": "Cubixia: Survival",

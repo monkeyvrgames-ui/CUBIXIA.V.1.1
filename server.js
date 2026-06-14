@@ -468,6 +468,7 @@ function normalizeContentState(state = {}) {
       active: Boolean(state.lockdown?.active),
       reason: String(state.lockdown?.reason || "").slice(0, 500),
       staffMessage: String(state.lockdown?.staffMessage || "").slice(0, 700),
+      voiceMessage: String(state.lockdown?.voiceMessage || "").slice(0, 500),
       lockedBy: String(state.lockdown?.lockedBy || "").slice(0, 40),
       startedAt: Number(state.lockdown?.startedAt || 0),
       audioUntil: Number(state.lockdown?.audioUntil || 0)
@@ -511,6 +512,7 @@ function publicLockdown(lockdown) {
     active: true,
     reason: lockdown.reason || "CUBIXIA is currently under owner lockdown.",
     staffMessage: lockdown.staffMessage || "",
+    voiceMessage: lockdown.voiceMessage || lockdown.reason || "CUBIXIA owner lockdown is active.",
     lockedBy: lockdown.lockedBy || "CUBIXIA",
     startedAt: Number(lockdown.startedAt || Date.now()),
     audioUntil: Number(lockdown.audioUntil || Date.now() + 5 * 60 * 1000),
@@ -654,7 +656,7 @@ function normalizeStudioServices(services = {}) {
 }
 
 function normalizeStudioWorld(world = {}) {
-  const size = Math.max(40, Math.min(500, Number(world.size || 160)));
+  const size = Math.max(80, Math.min(500, Number(world.size || 300)));
   const worldLimit = Math.max(18, Math.min(245, size / 2 - 2));
   const objects = Array.isArray(world.objects) ? world.objects.slice(0, 150).map((object, index) => normalizeStudioObject(object, index, worldLimit)) : [];
   if (!objects.some((object) => object.type === "spawn")) {
@@ -1940,11 +1942,13 @@ app.post("/api/admin/lockdown", async (req, res) => {
   if (active) {
     const reason = String(req.body.reason || "").trim().slice(0, 500);
     const staffMessage = String(req.body.staffMessage || "").trim().slice(0, 700);
+    const voiceMessage = String(req.body.voiceMessage || reason).trim().slice(0, 500);
     if (!reason) return res.status(400).json({ error: "Lockdown reason is required." });
     state.lockdown = {
       active: true,
       reason,
       staffMessage,
+      voiceMessage,
       lockedBy: owner.username,
       startedAt: Date.now(),
       audioUntil: Date.now() + 5 * 60 * 1000
@@ -1976,6 +1980,7 @@ app.post("/api/admin/lockdown", async (req, res) => {
       active: false,
       reason: "",
       staffMessage: "",
+      voiceMessage: "",
       lockedBy: owner.username,
       startedAt: 0,
       audioUntil: 0
@@ -2246,7 +2251,7 @@ app.get("/health", (_req, res) => {
   res.json({
     ok: true,
     app: "CUBIXIA",
-    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.1.8",
+    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.2.0",
     twoStepSkipped: SKIP_TWO_STEP_FOR_NOW,
     mode: process.env.CUBIXIA_DESKTOP ? "desktop-local-server" : "shared-server",
     gmailReady: gmail.ready,
@@ -2262,7 +2267,7 @@ app.get("/health/email", async (_req, res) => {
   res.json({
     ok: true,
     app: "CUBIXIA",
-    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.1.8",
+    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.2.0",
     twoStepSkipped: SKIP_TWO_STEP_FOR_NOW,
     gmailReady: gmail.ready,
     gmailUserSet: gmail.userSet,
@@ -3263,7 +3268,7 @@ app.post("/api/game-command", async (req, res) => {
       if (["startevent", "stopevent", "globalemote", "spawnnpc", "spawnitem", "firework", "spotlight", "freezeall", "unfreezeall"].includes(parsed.name)) publicMessage = message;
     } else if (parsed.name === "lockdown") {
       const reason = parsed.rest.slice(0, 500) || "Owner emergency lockdown.";
-      state.lockdown = { active: true, reason, lockedBy: actor.username, startedAt: now, audioUntil: now + 5 * 60 * 1000 };
+      state.lockdown = { active: true, reason, staffMessage: "", voiceMessage: reason, lockedBy: actor.username, startedAt: now, audioUntil: now + 5 * 60 * 1000 };
       users.filter((entry) => !canModerate(entry)).forEach((entry) => {
         entry.notifications = entry.notifications || [];
         entry.currentGame = "";
@@ -3273,7 +3278,7 @@ app.post("/api/game-command", async (req, res) => {
       await writeContentState(state);
       message = `Owner lockdown started: ${reason}`;
     } else if (parsed.name === "unlockdown") {
-      state.lockdown = { active: false, reason: "", lockedBy: "", startedAt: 0, audioUntil: 0 };
+      state.lockdown = { active: false, reason: "", staffMessage: "", voiceMessage: "", lockedBy: "", startedAt: 0, audioUntil: 0 };
       await writeContentState(state);
       message = "Owner lockdown ended.";
     } else {
