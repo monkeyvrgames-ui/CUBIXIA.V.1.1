@@ -21,6 +21,8 @@ let lockdownPoll = null;
 let userRefreshPoll = null;
 let lockdownAudio = null;
 let lockdownMuted = localStorage.getItem("cubixiaLockdownMuted") === "true";
+let lockdownVoiceTimer = null;
+let lockdownVoiceKey = "";
 let latestStaffLockdownKey = "";
 
 window.addEventListener("pagehide", () => {
@@ -471,6 +473,7 @@ function staffLockdownPopup(lockdown) {
   if (!canModerateUser(currentUser) || !lockdown?.active) return;
   const key = `${lockdown.startedAt || ""}:${lockdown.staffMessage || lockdown.reason || ""}`;
   latestStaffLockdownKey = key;
+  playLockdownAudio(lockdown);
   if (sessionStorage.getItem(`staffLockdownDismissed:${key}`) === "true") return;
   let popup = document.querySelector("#staffLockdownPopup");
   if (!popup) {
@@ -486,8 +489,10 @@ function staffLockdownPopup(lockdown) {
     </div>
     <strong>${escapeHtml(lockdown.lockedBy || "Owner")} needs staff help</strong>
     <p>${escapeHtml(lockdown.staffMessage || lockdown.reason || "Stay online, check reports, watch chat, and help investigate.")}</p>
+    <button id="playStaffLockdownAudio" type="button">Play Alarm / Robot Voice</button>
   `;
   popup.classList.add("show");
+  popup.querySelector("#playStaffLockdownAudio")?.addEventListener("click", () => playLockdownAudio(lockdown, true));
   popup.querySelector("#dismissStaffLockdown")?.addEventListener("click", () => {
     sessionStorage.setItem(`staffLockdownDismissed:${key}`, "true");
     popup.classList.remove("show");
@@ -500,13 +505,61 @@ function clearStaffLockdownPopup() {
 }
 
 function stopLockdownAudio() {
-  if (!lockdownAudio) return;
-  lockdownAudio.pause();
-  lockdownAudio.currentTime = 0;
-  lockdownAudio = null;
+  if (lockdownAudio) {
+    lockdownAudio.pause();
+    lockdownAudio.currentTime = 0;
+    lockdownAudio = null;
+  }
+  stopLockdownVoice();
 }
 
-function playLockdownAudio(lockdown) {
+function stopLockdownVoice() {
+  if (lockdownVoiceTimer) clearTimeout(lockdownVoiceTimer);
+  lockdownVoiceTimer = null;
+  if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+}
+
+function pickRobotVoice() {
+  if (!("speechSynthesis" in window)) return null;
+  const voices = window.speechSynthesis.getVoices?.() || [];
+  return voices.find((voice) => /zira|mark|david|google us english|english/i.test(voice.name)) || voices[0] || null;
+}
+
+function speakLockdownVoice(lockdown, force = false) {
+  if (!("speechSynthesis" in window)) return;
+  const audioUntil = Number(lockdown.audioUntil || Date.now() + 5 * 60 * 1000);
+  if (Date.now() >= audioUntil || lockdownMuted) return;
+  const voiceText = String(lockdown.voiceMessage || lockdown.reason || "CUBIXIA owner lockdown is active.").trim().slice(0, 500);
+  if (!voiceText) return;
+  const key = `${lockdown.startedAt || ""}:${voiceText}`;
+  if (!force && lockdownVoiceKey === key && lockdownVoiceTimer) return;
+  stopLockdownVoice();
+  lockdownVoiceKey = key;
+  const say = () => {
+    if (lockdownMuted || Date.now() >= audioUntil) return stopLockdownVoice();
+    const utterance = new SpeechSynthesisUtterance(`CUBIXIA alert. ${voiceText}`);
+    const voice = pickRobotVoice();
+    if (voice) utterance.voice = voice;
+    utterance.rate = 0.78;
+    utterance.pitch = 0.42;
+    utterance.volume = 1;
+    utterance.onend = () => {
+      const delay = Math.max(3000, Math.min(12000, audioUntil - Date.now()));
+      if (!lockdownMuted && Date.now() < audioUntil) lockdownVoiceTimer = setTimeout(say, delay);
+    };
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utterance);
+  };
+  if (!pickRobotVoice() && "onvoiceschanged" in window.speechSynthesis) {
+    window.speechSynthesis.onvoiceschanged = () => {
+      window.speechSynthesis.onvoiceschanged = null;
+      say();
+    };
+  }
+  say();
+}
+
+function playLockdownAudio(lockdown, forceVoice = false) {
   const audioUntil = Number(lockdown.audioUntil || Date.now() + 5 * 60 * 1000);
   if (Date.now() >= audioUntil) return;
   if (lockdownMuted) return;
@@ -521,6 +574,7 @@ function playLockdownAudio(lockdown) {
     if (button) button.hidden = false;
   });
   setTimeout(stopLockdownAudio, Math.max(1000, audioUntil - Date.now()));
+  speakLockdownVoice(lockdown, forceVoice);
 }
 
 function lockdownScreen(lockdown, user = currentUser) {
@@ -1494,6 +1548,7 @@ function ownerPanelPage(user) {
               <p id="ownerLockdownStatus">Checking lockdown status...</p>
               <textarea name="reason" placeholder="Reason shown to every player" required></textarea>
               <textarea name="staffMessage" placeholder="Private message for staff: what should mods/admins do?"></textarea>
+              <textarea name="voiceMessage" placeholder="Robot voice announcement: what should the alarm say out loud?"></textarea>
               <button class="danger" id="ownerLockdownButton">Start Owner Lockdown</button>
             </form>
           </div>
@@ -1783,7 +1838,7 @@ function defaultStudioProject(user) {
     published: false,
     source: "studio",
     studioWorld: {
-      size: 160,
+      size: 300,
       sky: "#91d7ff",
       ground: "#5fbd82",
       services: defaultStudioServices(),
@@ -1813,7 +1868,7 @@ async function studioPage(user, selectedId = "") {
   studioGames = (data.published || studioGames).map((game) => ({ ...game, source: "studio", banner: "studio" }));
   const activeProject = selectedId === "new" ? defaultStudioProject(currentUser) : (selectedId && studioProjects.find((entry) => entry.id === selectedId)) || studioProjects[0] || defaultStudioProject(currentUser);
   activeProject.studioWorld = activeProject.studioWorld || defaultStudioProject(currentUser).studioWorld;
-  activeProject.studioWorld.size = Number(activeProject.studioWorld.size || 160);
+  activeProject.studioWorld.size = Number(activeProject.studioWorld.size || 300);
   activeProject.studioWorld.services = { ...defaultStudioServices(), ...(activeProject.studioWorld.services || {}) };
   app.innerHTML = `
     <section class="studio-app">
@@ -1865,8 +1920,8 @@ async function studioPage(user, selectedId = "") {
             <h2>Project</h2>
             <label>Genre<input id="studioGenre" value="${escapeHtml(activeProject.genre || "Creator")}" maxlength="32" /></label>
             <label>Description<textarea id="studioDescription" maxlength="600">${escapeHtml(activeProject.description || "")}</textarea></label>
-            <label>World Size <span id="studioWorldSizeValue">${Number(activeProject.studioWorld.size || 160)}</span>
-              <input id="studioWorldSize" type="range" min="40" max="500" step="10" value="${Number(activeProject.studioWorld.size || 160)}" />
+            <label>World Size <span id="studioWorldSizeValue">${Number(activeProject.studioWorld.size || 300)}</span>
+              <input id="studioWorldSize" type="range" min="80" max="500" step="10" value="${Number(activeProject.studioWorld.size || 300)}" />
             </label>
             <div class="studio-swatches">
               <label>Sky <input id="studioSky" type="color" value="${escapeHtml(activeProject.studioWorld?.sky || "#91d7ff")}" /></label>
@@ -1922,8 +1977,11 @@ function bindStudioPage(project) {
     moveKeys: {},
     drag: null,
     orbit: null,
-    animating: true
+    animating: true,
+    history: [],
+    future: []
   };
+  pushStudioHistory();
   document.querySelector("#studioProjectSelect").addEventListener("change", (event) => {
     const projectId = event.currentTarget.value;
     studioPage(currentUser, projectId);
@@ -1934,7 +1992,9 @@ function bindStudioPage(project) {
     });
   });
   ["studioTitle", "studioGenre", "studioDescription", "studioSky", "studioGround", "studioWorldSize"].forEach((id) => {
-    document.querySelector(`#${id}`).addEventListener("input", syncStudioProjectFromForm);
+    const input = document.querySelector(`#${id}`);
+    input.addEventListener("input", syncStudioProjectFromForm);
+    input.addEventListener("change", pushStudioHistory);
   });
   document.querySelector("#studioSave").addEventListener("click", () => saveStudioProject(false));
   document.querySelector("#studioPublish").addEventListener("click", publishStudioProject);
@@ -1973,6 +2033,9 @@ function bindStudioPage(project) {
       studioStatus(`${studioEditor.selectedService} selected.`);
     });
   });
+  document.querySelectorAll(".studio-panel-title button").forEach((button) => {
+    button.title = "Hide this panel";
+  });
   renderStudioRibbon();
   startStudioViewport();
   applyStudioPanelVisibility();
@@ -1985,7 +2048,7 @@ function syncStudioProjectFromForm() {
   studioEditor.project.description = document.querySelector("#studioDescription")?.value.trim() || "A player-created CUBIXIA experience.";
   studioEditor.project.studioWorld.sky = document.querySelector("#studioSky")?.value || "#91d7ff";
   studioEditor.project.studioWorld.ground = document.querySelector("#studioGround")?.value || "#5fbd82";
-  studioEditor.project.studioWorld.size = Math.max(40, Math.min(500, Number(document.querySelector("#studioWorldSize")?.value || 160)));
+  studioEditor.project.studioWorld.size = Math.max(80, Math.min(500, Number(document.querySelector("#studioWorldSize")?.value || 300)));
   const sizeLabel = document.querySelector("#studioWorldSizeValue");
   if (sizeLabel) sizeLabel.textContent = studioEditor.project.studioWorld.size;
   renderStudioSceneObjects();
@@ -2045,7 +2108,8 @@ async function startStudioViewport() {
           tool: studioEditor.tool,
           startX: event.clientX,
           startY: event.clientY,
-          original: JSON.parse(JSON.stringify(object))
+          original: JSON.parse(JSON.stringify(object)),
+          changed: false
         };
       } else if (object?.locked) {
         studioStatus("Locked object selected. Unlock it before transforming.");
@@ -2053,6 +2117,7 @@ async function startStudioViewport() {
     }
   });
   const studioPointerUp = () => {
+    if (studioEditor?.drag?.changed) pushStudioHistory();
     studioEditor.drag = null;
     if (studioEditor?.orbit) studioEditor.orbit.rotating = false;
     mount.classList.remove("camera-dragging");
@@ -2082,7 +2147,23 @@ async function startStudioViewport() {
       event.preventDefault();
       return openStudioProjectFile();
     }
+    if (event.ctrlKey && key === "z") {
+      event.preventDefault();
+      return undoStudioAction();
+    }
+    if ((event.ctrlKey && key === "y") || (event.ctrlKey && event.shiftKey && key === "z")) {
+      event.preventDefault();
+      return redoStudioAction();
+    }
     if (event.target?.matches?.("input, textarea, select")) return;
+    if (key === "delete" || key === "backspace") {
+      event.preventDefault();
+      return deleteSelectedStudioObject();
+    }
+    if (event.ctrlKey && key === "d") {
+      event.preventDefault();
+      return duplicateSelectedStudioObject();
+    }
     if (["w", "a", "s", "d", "q", "e"].includes(key)) {
       event.preventDefault();
       studioEditor.moveKeys[key] = true;
@@ -2127,7 +2208,7 @@ function renderStudioSceneObjects() {
   studioEditor.scene.background = new THREE.Color(studioEditor.project.studioWorld.sky || "#91d7ff");
   studioEditor.objectGroup.clear();
   studioEditor.meshes.clear();
-  const worldSize = Math.max(40, Math.min(500, Number(studioEditor.project.studioWorld.size || 160)));
+  const worldSize = Math.max(80, Math.min(500, Number(studioEditor.project.studioWorld.size || 300)));
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(worldSize, worldSize), new THREE.MeshStandardMaterial({ color: studioEditor.project.studioWorld.ground || "#5fbd82", roughness: 0.9 }));
   ground.rotation.x = -Math.PI / 2;
   ground.position.y = -0.01;
@@ -2163,6 +2244,8 @@ function renderStudioExplorer() {
       <button data-studio-command="add-script" type="button">+ Script</button>
       <button data-studio-command="add-folder" type="button">+ Folder</button>
       <button data-studio-command="add-sound" type="button">+ Sound</button>
+      <button data-studio-command="add-remote" type="button">+ Remote</button>
+      <button data-studio-command="add-ui" type="button">+ UI</button>
     </div>
   `;
   explorer.querySelectorAll("[data-studio-select]").forEach((button) => {
@@ -2199,6 +2282,12 @@ function renderStudioInspector() {
         ${["x", "y", "z"].map((axis) => `<label>Rot ${axis.toUpperCase()}<input name="rotation.${axis}" type="number" step="0.1" value="${Number(object.rotation?.[axis] ?? (axis === "y" ? object.rotationY || 0 : 0))}" /></label>`).join("")}
       </div>
       <label>Rotate Y<input name="rotation.y" type="range" min="-6.28" max="6.28" step="0.05" value="${Number(object.rotation?.y ?? object.rotationY ?? 0)}" /></label>
+      <div class="studio-axis-actions">
+        ${["x", "y", "z"].map((axis) => `
+          <button type="button" data-rotate-axis="${axis}" data-rotate-step="-0.25">Rot ${axis.toUpperCase()} -</button>
+          <button type="button" data-rotate-axis="${axis}" data-rotate-step="0.25">Rot ${axis.toUpperCase()} +</button>
+        `).join("")}
+      </div>
       <div class="studio-side-scale">
         ${["x-", "x+", "y-", "y+", "z-", "z+"].map((side) => `<button type="button" data-scale-side="${side}">Scale ${side.toUpperCase()}</button>`).join("")}
       </div>
@@ -2207,14 +2296,21 @@ function renderStudioInspector() {
       <button class="danger-lite" id="deleteStudioObject" type="button">Delete Object</button>
     </form>
   `;
-  inspector.querySelectorAll("input, select").forEach((input) => input.addEventListener("input", updateSelectedStudioObject));
+  inspector.querySelectorAll("input, select").forEach((input) => {
+    input.addEventListener("input", updateSelectedStudioObject);
+    input.addEventListener("change", pushStudioHistory);
+  });
   inspector.querySelectorAll("[data-scale-side]").forEach((button) => {
     button.addEventListener("click", () => scaleSelectedStudioSide(button.dataset.scaleSide));
+  });
+  inspector.querySelectorAll("[data-rotate-axis]").forEach((button) => {
+    button.addEventListener("click", () => rotateSelectedStudioAxis(button.dataset.rotateAxis, Number(button.dataset.rotateStep || 0)));
   });
   document.querySelector("#deleteStudioObject").addEventListener("click", () => {
     studioEditor.project.studioWorld.objects = studioEditor.project.studioWorld.objects.filter((entry) => entry.id !== object.id);
     studioEditor.selectedId = studioEditor.project.studioWorld.objects[0]?.id || "";
     renderStudioEditor();
+    pushStudioHistory();
   });
 }
 
@@ -2514,6 +2610,7 @@ function handleStudioCommand(command) {
     studioEditor.project.studioWorld.sky = "#b9e6ff";
     document.querySelector("#studioSky").value = "#b9e6ff";
     renderStudioSceneObjects();
+    pushStudioHistory();
     studioStatus("Beta lighting preview enabled.");
     return;
   }
@@ -2532,6 +2629,7 @@ function handleStudioCommand(command) {
     object.size.y = roundStudioNumber(object.size.y * 1.25);
     object.size.z = roundStudioNumber(object.size.z * 1.25);
     renderStudioEditor();
+    pushStudioHistory();
     studioStatus(`${object.name} adapted larger.`);
     return;
   }
@@ -2542,6 +2640,7 @@ function handleStudioCommand(command) {
     object.rotation.z = roundStudioNumber(Number(object.rotation.z || 0) + 0.5);
     object.rotationY = object.rotation.y;
     renderStudioEditor();
+    pushStudioHistory();
     studioStatus(`${object.name} clipped/rotated.`);
     return;
   }
@@ -2575,10 +2674,8 @@ function handleStudioCommand(command) {
     return;
   }
   if (normalized === "duplicate") return duplicateSelectedStudioObject();
-  if (normalized === "undo" || normalized === "redo") {
-    studioStatus(`${normalized === "undo" ? "Undo" : "Redo"} is ready for the next Studio history pass.`);
-    return;
-  }
+  if (normalized === "undo") return undoStudioAction();
+  if (normalized === "redo") return redoStudioAction();
   if (normalized === "view") {
     handleStudioCommand("stop");
     studioStatus("View menu reset the camera.");
@@ -2682,7 +2779,7 @@ function openStudioProjectFile() {
           studioWorld: {
             ...base.studioWorld,
             ...world,
-            size: Number(world.size || base.studioWorld.size || 160),
+            size: Number(world.size || base.studioWorld.size || 300),
             objects: Array.isArray(world.objects) ? world.objects : [],
             services: { ...defaultStudioServices(), ...(world.services || {}) }
           }
@@ -2691,6 +2788,7 @@ function openStudioProjectFile() {
         syncStudioFormFromProject();
         renderStudioEditor();
         renderStudioSceneObjects();
+        pushStudioHistory();
         studioStatus(`${studioEditor.project.title} opened from file.`);
       } catch (error) {
         studioStatus("That file was not a valid CUBIXIA Studio project.");
@@ -2711,7 +2809,7 @@ function syncStudioFormFromProject() {
     studioDescription: project.description || "",
     studioSky: world.sky || "#91d7ff",
     studioGround: world.ground || "#5fbd82",
-    studioWorldSize: Number(world.size || 160)
+    studioWorldSize: Number(world.size || 300)
   };
   Object.entries(values).forEach(([id, value]) => {
     const input = document.querySelector(`#${id}`);
@@ -2740,6 +2838,7 @@ function addStudioObject(type, asset = "") {
   studioEditor.project.studioWorld.objects.push(object);
   studioEditor.selectedId = object.id;
   renderStudioEditor();
+  pushStudioHistory();
   studioStatus(`${object.name} added.`);
 }
 
@@ -2754,6 +2853,7 @@ function addStudioServiceItem(type) {
     name: `${service} ${names[actualType] || "Item"}`
   });
   renderStudioExplorer();
+  pushStudioHistory();
   studioStatus(`${names[actualType] || "Item"} added to ${service}.`);
 }
 
@@ -2855,6 +2955,58 @@ function selectedStudioObject() {
   return studioEditor?.project?.studioWorld?.objects?.find((entry) => entry.id === studioEditor.selectedId);
 }
 
+function studioWorldSnapshot() {
+  return JSON.stringify(studioEditor?.project?.studioWorld || {});
+}
+
+function pushStudioHistory() {
+  if (!studioEditor?.project?.studioWorld) return;
+  const snapshot = studioWorldSnapshot();
+  const history = studioEditor.history || [];
+  if (history[history.length - 1] === snapshot) return;
+  history.push(snapshot);
+  studioEditor.history = history.slice(-80);
+  studioEditor.future = [];
+}
+
+function restoreStudioHistory(snapshot) {
+  if (!snapshot || !studioEditor) return;
+  try {
+    const world = JSON.parse(snapshot);
+    studioEditor.project.studioWorld = {
+      ...studioEditor.project.studioWorld,
+      ...world,
+      services: { ...defaultStudioServices(), ...(world.services || {}) },
+      objects: Array.isArray(world.objects) ? world.objects : []
+    };
+    studioEditor.selectedId = studioEditor.project.studioWorld.objects.some((object) => object.id === studioEditor.selectedId)
+      ? studioEditor.selectedId
+      : studioEditor.project.studioWorld.objects[0]?.id || "";
+    syncStudioFormFromProject();
+    renderStudioEditor();
+  } catch {
+    studioStatus("Could not restore that Studio history step.");
+  }
+}
+
+function undoStudioAction() {
+  if (!studioEditor?.history || studioEditor.history.length < 2) return studioStatus("Nothing to undo yet.");
+  const current = studioEditor.history.pop();
+  studioEditor.future = [...(studioEditor.future || []), current];
+  restoreStudioHistory(studioEditor.history[studioEditor.history.length - 1]);
+  studioStatus("Undo complete.");
+}
+
+function redoStudioAction() {
+  const future = studioEditor?.future || [];
+  if (!future.length) return studioStatus("Nothing to redo yet.");
+  const snapshot = future.pop();
+  studioEditor.history = [...(studioEditor.history || []), snapshot];
+  studioEditor.future = future;
+  restoreStudioHistory(snapshot);
+  studioStatus("Redo complete.");
+}
+
 function handleStudioPointerMove(event) {
   if (!studioEditor) return;
   if (studioEditor.orbit?.rotating) {
@@ -2889,6 +3041,7 @@ function handleStudioPointerMove(event) {
     object.rotation.x = roundStudioNumber(Number(original.rotation?.x || 0) + dy / 100);
     object.rotationY = object.rotation.y;
   }
+  studioEditor.drag.changed = true;
   renderStudioEditor();
 }
 
@@ -2921,7 +3074,7 @@ function moveStudioCamera() {
   target.z += Math.cos(yaw) * forward * speed - Math.sin(yaw) * right * speed;
   if (keys.e) target.y += speed;
   if (keys.q) target.y -= speed;
-  const limit = Math.max(20, Number(studioEditor.project.studioWorld.size || 160) / 2);
+  const limit = Math.max(40, Number(studioEditor.project.studioWorld.size || 300) / 2);
   target.x = Math.max(-limit, Math.min(limit, target.x));
   target.y = Math.max(0, Math.min(80, target.y));
   target.z = Math.max(-limit, Math.min(limit, target.z));
@@ -2943,6 +3096,7 @@ function cycleSelectedStudioMaterial() {
   const materials = ["plastic", "metal", "neon", "wood", "glass"];
   object.material = materials[(materials.indexOf(object.material || "plastic") + 1) % materials.length];
   renderStudioEditor();
+  pushStudioHistory();
   studioStatus(`${object.name} material set to ${object.material}.`);
 }
 
@@ -2952,6 +3106,7 @@ function cycleSelectedStudioColor() {
   const colors = ["#315cff", "#38aef3", "#44db78", "#ffcf55", "#ff575f", "#8b5cf6", "#f472b6"];
   object.color = colors[(colors.indexOf(object.color || colors[0]) + 1) % colors.length];
   renderStudioEditor();
+  pushStudioHistory();
   studioStatus(`${object.name} color changed.`);
 }
 
@@ -2969,6 +3124,7 @@ function duplicateSelectedStudioObject(groupMode = false) {
     studioEditor.selectedId = copy.id;
   }
   renderStudioEditor();
+  pushStudioHistory();
   studioStatus(groupMode ? "Grouped copies added." : "Object duplicated.");
 }
 
@@ -2977,6 +3133,7 @@ function toggleSelectedStudioFlag(flag) {
   if (!object) return studioStatus("Select an object first.");
   object[flag] = !object[flag];
   renderStudioEditor();
+  pushStudioHistory();
   studioStatus(`${object.name} ${flag} is now ${object[flag] ? "on" : "off"}.`);
 }
 
@@ -3054,6 +3211,7 @@ function deleteSelectedStudioObject() {
   studioEditor.project.studioWorld.objects = studioEditor.project.studioWorld.objects.filter((entry) => entry.id !== object.id);
   studioEditor.selectedId = studioEditor.project.studioWorld.objects[0]?.id || "";
   renderStudioEditor();
+  pushStudioHistory();
   studioStatus(`${object.name} deleted.`);
 }
 
@@ -3064,9 +3222,22 @@ function scaleSelectedStudioSide(side) {
   const axis = side[0];
   const direction = side.endsWith("+") ? 1 : -1;
   object.size[axis] = roundStudioNumber(Math.max(0.2, Number(object.size[axis] || 1) + 0.5));
-  object.position[axis] = roundStudioNumber(Number(object.position[axis] || 0) + direction * 0.25);
+  object.position[axis] = roundStudioNumber(Math.max(axis === "y" ? 0 : -245, Math.min(245, Number(object.position[axis] || 0) + direction * 0.25)));
   renderStudioEditor();
+  pushStudioHistory();
   studioStatus(`${object.name} scaled on ${side.toUpperCase()} side.`);
+}
+
+function rotateSelectedStudioAxis(axis, step) {
+  const object = selectedStudioObject();
+  if (!object) return studioStatus("Select an object first.");
+  if (object.locked) return studioStatus("Unlock the object before rotating.");
+  object.rotation = object.rotation || { x: 0, y: Number(object.rotationY || 0), z: 0 };
+  object.rotation[axis] = roundStudioNumber(Number(object.rotation[axis] || 0) + Number(step || 0));
+  object.rotationY = object.rotation.y;
+  renderStudioEditor();
+  pushStudioHistory();
+  studioStatus(`${object.name} rotated on ${axis.toUpperCase()}.`);
 }
 
 function snapSelectedStudioObject() {
@@ -3076,6 +3247,7 @@ function snapSelectedStudioObject() {
   object.position.y = Math.max(0, Math.round(Number(object.position.y || 0) * 2) / 2);
   object.position.z = Math.round(Number(object.position.z || 0));
   renderStudioEditor();
+  pushStudioHistory();
   studioStatus(`${object.name} snapped to grid.`);
 }
 
@@ -4207,6 +4379,7 @@ function bindOwnerPanel() {
     const button = lockdownForm.querySelector("#ownerLockdownButton");
     const reason = lockdownForm.querySelector("[name='reason']");
     const staffMessage = lockdownForm.querySelector("[name='staffMessage']");
+    const voiceMessage = lockdownForm.querySelector("[name='voiceMessage']");
     const data = await api("/api/lockdown").catch(() => ({ lockdown: null, staffLockdown: null }));
     const active = Boolean(data.staffLockdown?.active || data.lockdown?.active);
     lockdownForm.dataset.active = String(active);
@@ -4223,6 +4396,10 @@ function bindOwnerPanel() {
     if (staffMessage) {
       staffMessage.disabled = active;
       staffMessage.placeholder = active ? "Stop lockdown to clear the staff popup" : "Private message for staff: what should mods/admins do?";
+    }
+    if (voiceMessage) {
+      voiceMessage.disabled = active;
+      voiceMessage.placeholder = active ? "Stop lockdown to clear the robot announcement" : "Robot voice announcement: what should the alarm say out loud?";
     }
     return active;
   };
@@ -4282,7 +4459,7 @@ function bindOwnerPanel() {
     const payload = Object.fromEntries(new FormData(event.currentTarget).entries());
     try {
       const active = event.currentTarget.dataset.active === "true";
-      const data = await api("/api/admin/lockdown", { method: "POST", body: JSON.stringify({ active: !active, reason: payload.reason, staffMessage: payload.staffMessage }) });
+      const data = await api("/api/admin/lockdown", { method: "POST", body: JSON.stringify({ active: !active, reason: payload.reason, staffMessage: payload.staffMessage, voiceMessage: payload.voiceMessage }) });
       currentUser = data.user || currentUser;
       if (data.lockdown?.active) lockdownScreen(data.lockdown, currentUser);
       else if (active) {
@@ -4956,7 +5133,7 @@ async function startStudioGame3D(user, game) {
   const player = createAvatarMesh(THREE, user, true);
   const world = game.studioWorld || { objects: [] };
   const custom = buildStudioPlayableWorld(THREE, base.scene, world);
-  const worldLimit = Math.max(20, Math.min(250, Number(world.size || 160) / 2));
+  const worldLimit = Math.max(40, Math.min(250, Number(world.size || 300) / 2));
   player.position.set(custom.spawn.x, custom.spawn.y, custom.spawn.z);
   base.scene.add(player);
   const state = { score: 0, hp: 100, cash: Number(user.lastPlayed.currency || 0), paused: false, vy: 0, respawning: false };
@@ -5001,7 +5178,7 @@ function buildStudioPlayableWorld(THREE, scene, world) {
   const spawnObject = objects.find((object) => object.type === "spawn") || { position: { x: 0, y: 0, z: 4 } };
   const spawn = { x: Number(spawnObject.position?.x || 0), y: 0.8, z: Number(spawnObject.position?.z || 4) };
   const groundColor = parseColorNumber(world.ground || "#5fbd82");
-  const worldSize = Math.max(40, Math.min(500, Number(world.size || 160)));
+  const worldSize = Math.max(80, Math.min(500, Number(world.size || 300)));
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(worldSize, worldSize), new THREE.MeshStandardMaterial({ color: groundColor, roughness: 0.9 }));
   ground.rotation.x = -Math.PI / 2;
   ground.position.y = 0.012;

@@ -5604,6 +5604,7 @@ body[data-theme="dark"] .staff-command-guide span {
 }
 
 .service-actions,
+.studio-axis-actions,
 .studio-side-scale {
   display: grid;
   gap: 6px;
@@ -5612,6 +5613,7 @@ body[data-theme="dark"] .staff-command-guide span {
 }
 
 .service-actions button,
+.studio-axis-actions button,
 .studio-side-scale button {
   background: #edf2f7;
   border: 1px solid #d5dde8;

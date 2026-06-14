@@ -302,9 +302,13 @@ async function syncDesktopSeedData() {
       const source = path.join(DATA_SEED_DIR, file);
       const destination = path.join(DATA_DIR, file);
       try {
-        await fs.copyFile(source, destination);
+        await fs.access(destination);
       } catch {
-        // Missing seed files are recreated by ensureStore below.
+        try {
+          await fs.copyFile(source, destination);
+        } catch {
+          // Missing seed files are recreated by ensureStore below.
+        }
       }
     }
     await fs.writeFile(DESKTOP_DATA_MARKER_FILE, DESKTOP_DATA_VERSION, "utf8");
@@ -352,6 +356,33 @@ async function readUsersBackup() {
   } catch {
     return null;
   }
+}
+
+async function recoverUserFromBackup(users, identity, password) {
+  const backup = await readUsersBackup();
+  if (!backup?.length) return null;
+  const lookup = String(identity || "").toLowerCase();
+  const backupUser = backup.map(normalizeUser).find((entry) => (
+    String(entry.username || "").toLowerCase() === lookup ||
+    String(entry.email || "").toLowerCase() === lookup
+  ));
+  if (!backupUser?.passwordHash) return null;
+  const passwordOk = await bcrypt.compare(String(password || ""), backupUser.passwordHash).catch(() => false);
+  if (!passwordOk) return null;
+
+  const existingIndex = users.findIndex((entry) => (
+    entry.id === backupUser.id ||
+    String(entry.username || "").toLowerCase() === String(backupUser.username || "").toLowerCase() ||
+    String(entry.email || "").toLowerCase() === String(backupUser.email || "").toLowerCase()
+  ));
+  const restored = normalizeUser({
+    ...backupUser,
+    online: true,
+    lastOnline: new Date().toISOString()
+  });
+  if (existingIndex >= 0) users[existingIndex] = restored;
+  else users.push(restored);
+  return restored;
 }
 
 function repairUsersJson(raw) {
@@ -1726,12 +1757,22 @@ app.post("/api/login", async (req, res) => {
     user = await createBootstrapOwner(users, cleanName, password);
   }
   if (!user) {
+    user = await recoverUserFromBackup(users, identity, password);
+  }
+  if (!user) {
     return res.status(users.length ? 401 : 404).json({
       error: users.length ? "Incorrect username or password." : "No accounts are saved yet. Register a new account, or log in as Tanklyplayz to restore the owner account."
     });
   }
 
-  const passwordOk = user.passwordHash ? await bcrypt.compare(password, user.passwordHash) : false;
+  let passwordOk = user.passwordHash ? await bcrypt.compare(password, user.passwordHash) : false;
+  if (!passwordOk) {
+    const recovered = await recoverUserFromBackup(users, identity, password);
+    if (recovered) {
+      user = recovered;
+      passwordOk = true;
+    }
+  }
   if (!passwordOk) {
     return res.status(401).json({ error: "Incorrect username or password." });
   }
@@ -2251,7 +2292,7 @@ app.get("/health", (_req, res) => {
   res.json({
     ok: true,
     app: "CUBIXIA",
-    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.2.0",
+    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.2.1",
     twoStepSkipped: SKIP_TWO_STEP_FOR_NOW,
     mode: process.env.CUBIXIA_DESKTOP ? "desktop-local-server" : "shared-server",
     gmailReady: gmail.ready,
@@ -2267,7 +2308,7 @@ app.get("/health/email", async (_req, res) => {
   res.json({
     ok: true,
     app: "CUBIXIA",
-    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.2.0",
+    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.2.1",
     twoStepSkipped: SKIP_TWO_STEP_FOR_NOW,
     gmailReady: gmail.ready,
     gmailUserSet: gmail.userSet,
