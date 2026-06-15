@@ -23,6 +23,7 @@ let lockdownAudio = null;
 let lockdownMuted = localStorage.getItem("cubixiaLockdownMuted") === "true";
 let lockdownVoiceTimer = null;
 let lockdownVoiceKey = "";
+let lockdownVoiceSpeaking = false;
 let latestStaffLockdownKey = "";
 
 window.addEventListener("pagehide", () => {
@@ -464,6 +465,8 @@ function startLockdownWatcher() {
         stopLockdownAudio();
         document.body.classList.remove("lockdown-active");
         goHome();
+      } else if (!data.staffLockdown?.active) {
+        stopLockdownAudio();
       }
     } catch {}
   }, 3500);
@@ -502,6 +505,7 @@ function staffLockdownPopup(lockdown) {
 function clearStaffLockdownPopup() {
   latestStaffLockdownKey = "";
   document.querySelector("#staffLockdownPopup")?.remove();
+  if (!document.body.classList.contains("lockdown-active")) stopLockdownAudio();
 }
 
 function stopLockdownAudio() {
@@ -516,6 +520,7 @@ function stopLockdownAudio() {
 function stopLockdownVoice() {
   if (lockdownVoiceTimer) clearTimeout(lockdownVoiceTimer);
   lockdownVoiceTimer = null;
+  lockdownVoiceSpeaking = false;
   if ("speechSynthesis" in window) window.speechSynthesis.cancel();
 }
 
@@ -532,7 +537,7 @@ function speakLockdownVoice(lockdown, force = false) {
   const voiceText = String(lockdown.voiceMessage || lockdown.reason || "CUBIXIA owner lockdown is active.").trim().slice(0, 500);
   if (!voiceText) return;
   const key = `${lockdown.startedAt || ""}:${voiceText}`;
-  if (!force && lockdownVoiceKey === key && lockdownVoiceTimer) return;
+  if (!force && lockdownVoiceKey === key && (lockdownVoiceTimer || lockdownVoiceSpeaking)) return;
   stopLockdownVoice();
   lockdownVoiceKey = key;
   const say = () => {
@@ -543,9 +548,17 @@ function speakLockdownVoice(lockdown, force = false) {
     utterance.rate = 0.78;
     utterance.pitch = 0.42;
     utterance.volume = 1;
+    utterance.onstart = () => {
+      lockdownVoiceSpeaking = true;
+    };
     utterance.onend = () => {
-      const delay = Math.max(3000, Math.min(12000, audioUntil - Date.now()));
+      lockdownVoiceSpeaking = false;
+      const delay = Math.max(30000, Math.min(60000, audioUntil - Date.now()));
       if (!lockdownMuted && Date.now() < audioUntil) lockdownVoiceTimer = setTimeout(say, delay);
+    };
+    utterance.onerror = () => {
+      lockdownVoiceSpeaking = false;
+      lockdownVoiceTimer = setTimeout(say, 30000);
     };
     window.speechSynthesis.cancel();
     window.speechSynthesis.speak(utterance);
@@ -4464,6 +4477,7 @@ function bindOwnerPanel() {
       if (data.lockdown?.active) lockdownScreen(data.lockdown, currentUser);
       else if (active) {
         clearStaffLockdownPopup();
+        stopLockdownAudio();
         message.textContent = "Owner lockdown stopped.";
       } else {
         if (data.staffLockdown?.active) staffLockdownPopup(data.staffLockdown);

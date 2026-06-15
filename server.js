@@ -391,18 +391,57 @@ function repairUsersJson(raw) {
   return "";
 }
 
+function mergeUniqueTextList(...lists) {
+  const seen = new Set();
+  const merged = [];
+  lists.flat().forEach((value) => {
+    const text = String(value || "").trim();
+    if (!text) return;
+    const key = text.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    merged.push(text);
+  });
+  return merged;
+}
+
+function mergeUserRelations(baseUser, savedUser = {}, backupUser = {}) {
+  if (!baseUser) return baseUser;
+  return {
+    ...baseUser,
+    friends: mergeUniqueTextList(baseUser.friends || [], savedUser.friends || [], backupUser.friends || []),
+    incomingRequests: mergeUniqueTextList(baseUser.incomingRequests || [], savedUser.incomingRequests || [], backupUser.incomingRequests || []),
+    outgoingRequests: mergeUniqueTextList(baseUser.outgoingRequests || [], savedUser.outgoingRequests || [], backupUser.outgoingRequests || []),
+    notifications: [
+      ...(Array.isArray(baseUser.notifications) ? baseUser.notifications : []),
+      ...(Array.isArray(savedUser.notifications) ? savedUser.notifications : []),
+      ...(Array.isArray(backupUser.notifications) ? backupUser.notifications : [])
+    ].filter((note, index, all) => note?.id && all.findIndex((entry) => entry?.id === note.id) === index).slice(0, 120)
+  };
+}
+
 async function writeUsers(users) {
-  const payload = JSON.stringify(users.map(normalizeUser), null, 2);
   userWriteQueue = userWriteQueue.catch(() => {}).then(async () => {
     const tmp = `${USERS_FILE}.tmp`;
+    let existing = [];
+    let backup = [];
     try {
-      const existing = JSON.parse(await fs.readFile(USERS_FILE, "utf8"));
+      existing = JSON.parse(await fs.readFile(USERS_FILE, "utf8"));
       if (Array.isArray(existing) && existing.length > 0) {
         await fs.writeFile(USERS_BACKUP_FILE, JSON.stringify(existing, null, 2), "utf8");
       }
     } catch {
       // If the previous file is damaged, keep writing the new valid payload.
     }
+    backup = await readUsersBackup() || [];
+    const normalizedExisting = Array.isArray(existing) ? existing.map(normalizeUser) : [];
+    const normalizedBackup = Array.isArray(backup) ? backup.map(normalizeUser) : [];
+    const payloadUsers = users.map(normalizeUser).map((user) => {
+      const saved = normalizedExisting.find((entry) => entry.id === user.id || String(entry.username || "").toLowerCase() === String(user.username || "").toLowerCase()) || {};
+      const lastGood = normalizedBackup.find((entry) => entry.id === user.id || String(entry.username || "").toLowerCase() === String(user.username || "").toLowerCase()) || {};
+      return mergeUserRelations(user, saved, lastGood);
+    });
+    const payload = JSON.stringify(payloadUsers, null, 2);
     await fs.writeFile(tmp, payload, "utf8");
     await fs.rename(tmp, USERS_FILE);
   });
@@ -2292,7 +2331,7 @@ app.get("/health", (_req, res) => {
   res.json({
     ok: true,
     app: "CUBIXIA",
-    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.2.1",
+    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.2.2",
     twoStepSkipped: SKIP_TWO_STEP_FOR_NOW,
     mode: process.env.CUBIXIA_DESKTOP ? "desktop-local-server" : "shared-server",
     gmailReady: gmail.ready,
@@ -2308,7 +2347,7 @@ app.get("/health/email", async (_req, res) => {
   res.json({
     ok: true,
     app: "CUBIXIA",
-    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.2.1",
+    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.2.2",
     twoStepSkipped: SKIP_TWO_STEP_FOR_NOW,
     gmailReady: gmail.ready,
     gmailUserSet: gmail.userSet,
