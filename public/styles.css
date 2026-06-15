@@ -5605,7 +5605,8 @@ body[data-theme="dark"] .staff-command-guide span {
 
 .service-actions,
 .studio-axis-actions,
-.studio-side-scale {
+.studio-side-scale,
+.studio-shape-grid {
   display: grid;
   gap: 6px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -5614,7 +5615,8 @@ body[data-theme="dark"] .staff-command-guide span {
 
 .service-actions button,
 .studio-axis-actions button,
-.studio-side-scale button {
+.studio-side-scale button,
+.studio-shape-grid button {
   background: #edf2f7;
   border: 1px solid #d5dde8;
   border-radius: 6px;
@@ -5622,6 +5624,31 @@ body[data-theme="dark"] .staff-command-guide span {
   font-size: 11px;
   font-weight: 850;
   padding: 7px;
+}
+
+.studio-transform-controls {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.studio-shape-section {
+  background: #f7f9fc;
+  border: 1px solid #d8e1ec;
+  border-radius: 8px;
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+}
+
+.studio-shape-section strong {
+  color: #172033;
+  font-size: 12px;
+}
+
+.studio-shape-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 0;
 }
 
 .studio-object-form {

@@ -476,7 +476,7 @@ function staffLockdownPopup(lockdown) {
   if (!canModerateUser(currentUser) || !lockdown?.active) return;
   const key = `${lockdown.startedAt || ""}:${lockdown.staffMessage || lockdown.reason || ""}`;
   latestStaffLockdownKey = key;
-  playLockdownAudio(lockdown);
+  stopLockdownAudio();
   if (sessionStorage.getItem(`staffLockdownDismissed:${key}`) === "true") return;
   let popup = document.querySelector("#staffLockdownPopup");
   if (!popup) {
@@ -492,10 +492,9 @@ function staffLockdownPopup(lockdown) {
     </div>
     <strong>${escapeHtml(lockdown.lockedBy || "Owner")} needs staff help</strong>
     <p>${escapeHtml(lockdown.staffMessage || lockdown.reason || "Stay online, check reports, watch chat, and help investigate.")}</p>
-    <button id="playStaffLockdownAudio" type="button">Play Alarm / Robot Voice</button>
+    <small>Staff alarm audio is muted so you can fix the issue.</small>
   `;
   popup.classList.add("show");
-  popup.querySelector("#playStaffLockdownAudio")?.addEventListener("click", () => playLockdownAudio(lockdown, true));
   popup.querySelector("#dismissStaffLockdown")?.addEventListener("click", () => {
     sessionStorage.setItem(`staffLockdownDismissed:${key}`, "true");
     popup.classList.remove("show");
@@ -514,6 +513,14 @@ function stopLockdownAudio() {
     lockdownAudio.currentTime = 0;
     lockdownAudio = null;
   }
+  document.querySelectorAll("audio").forEach((audio) => {
+    const src = String(audio.currentSrc || audio.src || "");
+    if (src.includes("owner-lockdown") || audio.dataset?.cubixiaLockdown === "true") {
+      audio.pause();
+      audio.currentTime = 0;
+      audio.remove();
+    }
+  });
   stopLockdownVoice();
 }
 
@@ -521,6 +528,7 @@ function stopLockdownVoice() {
   if (lockdownVoiceTimer) clearTimeout(lockdownVoiceTimer);
   lockdownVoiceTimer = null;
   lockdownVoiceSpeaking = false;
+  lockdownVoiceKey = "";
   if ("speechSynthesis" in window) window.speechSynthesis.cancel();
 }
 
@@ -578,6 +586,7 @@ function playLockdownAudio(lockdown, forceVoice = false) {
   if (lockdownMuted) return;
   if (!lockdownAudio) {
     lockdownAudio = new Audio(lockdown.audio || "/assets/owner-lockdown.mp3");
+    lockdownAudio.dataset.cubixiaLockdown = "true";
     lockdownAudio.loop = true;
     lockdownAudio.volume = 0.85;
   }
@@ -1984,6 +1993,8 @@ function bindStudioPage(project) {
     selectedId: project.studioWorld?.objects?.[0]?.id || "",
     meshes: new Map(),
     tool: "select",
+    transformAxis: "all",
+    transformSide: "center",
     ribbonTab: "home",
     selectedService: "World",
     closedPanels: new Set(),
@@ -2295,14 +2306,41 @@ function renderStudioInspector() {
         ${["x", "y", "z"].map((axis) => `<label>Rot ${axis.toUpperCase()}<input name="rotation.${axis}" type="number" step="0.1" value="${Number(object.rotation?.[axis] ?? (axis === "y" ? object.rotationY || 0 : 0))}" /></label>`).join("")}
       </div>
       <label>Rotate Y<input name="rotation.y" type="range" min="-6.28" max="6.28" step="0.05" value="${Number(object.rotation?.y ?? object.rotationY ?? 0)}" /></label>
+      <div class="studio-transform-controls">
+        <label>Drag Axis<select id="studioTransformAxis">
+          ${["all", "x", "y", "z"].map((axis) => `<option value="${axis}" ${studioEditor.transformAxis === axis ? "selected" : ""}>${axis === "all" ? "screen/free" : axis.toUpperCase()}</option>`).join("")}
+        </select></label>
+        <label>Scale From<select id="studioTransformSide">
+          ${[
+            ["center", "center"],
+            ["negative", "- side"],
+            ["positive", "+ side"]
+          ].map(([value, label]) => `<option value="${value}" ${studioEditor.transformSide === value ? "selected" : ""}>${label}</option>`).join("")}
+        </select></label>
+      </div>
+      <div class="studio-shape-section">
+        <strong>Move</strong>
+        <div class="studio-shape-grid">
+          ${["x", "y", "z"].map((axis) => `
+            <button type="button" data-nudge-axis="${axis}" data-nudge-step="-0.5">${axis.toUpperCase()} -</button>
+            <button type="button" data-nudge-axis="${axis}" data-nudge-step="0.5">${axis.toUpperCase()} +</button>
+          `).join("")}
+        </div>
+      </div>
+      <div class="studio-shape-section">
+        <strong>Size Face</strong>
+        <div class="studio-shape-grid">
+          ${["x-", "x+", "y-", "y+", "z-", "z+"].map((side) => `
+            <button type="button" data-scale-side="${side}" data-scale-amount="-0.5">${side.toUpperCase()} shrink</button>
+            <button type="button" data-scale-side="${side}" data-scale-amount="0.5">${side.toUpperCase()} grow</button>
+          `).join("")}
+        </div>
+      </div>
       <div class="studio-axis-actions">
         ${["x", "y", "z"].map((axis) => `
           <button type="button" data-rotate-axis="${axis}" data-rotate-step="-0.25">Rot ${axis.toUpperCase()} -</button>
           <button type="button" data-rotate-axis="${axis}" data-rotate-step="0.25">Rot ${axis.toUpperCase()} +</button>
         `).join("")}
-      </div>
-      <div class="studio-side-scale">
-        ${["x-", "x+", "y-", "y+", "z-", "z+"].map((side) => `<button type="button" data-scale-side="${side}">Scale ${side.toUpperCase()}</button>`).join("")}
       </div>
       <label class="studio-check"><input name="locked" type="checkbox" ${object.locked ? "checked" : ""} /> Locked</label>
       <label class="studio-check"><input name="anchored" type="checkbox" ${object.anchored === false ? "" : "checked"} /> Anchored</label>
@@ -2314,10 +2352,21 @@ function renderStudioInspector() {
     input.addEventListener("change", pushStudioHistory);
   });
   inspector.querySelectorAll("[data-scale-side]").forEach((button) => {
-    button.addEventListener("click", () => scaleSelectedStudioSide(button.dataset.scaleSide));
+    button.addEventListener("click", () => scaleSelectedStudioSide(button.dataset.scaleSide, Number(button.dataset.scaleAmount || 0.5)));
   });
   inspector.querySelectorAll("[data-rotate-axis]").forEach((button) => {
     button.addEventListener("click", () => rotateSelectedStudioAxis(button.dataset.rotateAxis, Number(button.dataset.rotateStep || 0)));
+  });
+  inspector.querySelectorAll("[data-nudge-axis]").forEach((button) => {
+    button.addEventListener("click", () => nudgeSelectedStudioObject(button.dataset.nudgeAxis, Number(button.dataset.nudgeStep || 0)));
+  });
+  inspector.querySelector("#studioTransformAxis")?.addEventListener("change", (event) => {
+    studioEditor.transformAxis = event.currentTarget.value;
+    studioStatus(`Drag axis set to ${studioEditor.transformAxis}.`);
+  });
+  inspector.querySelector("#studioTransformSide")?.addEventListener("change", (event) => {
+    studioEditor.transformSide = event.currentTarget.value;
+    studioStatus(`Scale side set to ${studioEditor.transformSide}.`);
   });
   document.querySelector("#deleteStudioObject").addEventListener("click", () => {
     studioEditor.project.studioWorld.objects = studioEditor.project.studioWorld.objects.filter((entry) => entry.id !== object.id);
@@ -3039,19 +3088,41 @@ function handleStudioPointerMove(event) {
   const dy = event.clientY - studioEditor.drag.startY;
   const original = studioEditor.drag.original;
   if (studioEditor.drag.tool === "move" || studioEditor.drag.tool === "transform") {
-    object.position.x = roundStudioNumber(original.position.x + dx / 18);
-    object.position.z = roundStudioNumber(original.position.z + dy / 18);
+    const axis = studioEditor.transformAxis || "all";
+    if (axis === "x") object.position.x = roundStudioNumber(original.position.x + dx / 18);
+    else if (axis === "y") object.position.y = roundStudioNumber(original.position.y - dy / 18);
+    else if (axis === "z") object.position.z = roundStudioNumber(original.position.z + dy / 18);
+    else {
+      object.position.x = roundStudioNumber(original.position.x + dx / 18);
+      object.position.z = roundStudioNumber(original.position.z + dy / 18);
+    }
   }
   if (studioEditor.drag.tool === "scale") {
-    const factor = Math.max(0.15, 1 + (dx - dy) / 90);
-    object.size.x = roundStudioNumber(Math.max(0.2, original.size.x * factor));
-    object.size.y = roundStudioNumber(Math.max(0.2, original.size.y * factor));
-    object.size.z = roundStudioNumber(Math.max(0.2, original.size.z * factor));
+    const axis = studioEditor.transformAxis || "all";
+    const amount = roundStudioNumber((dx - dy) / 45);
+    if (axis === "all") {
+      const factor = Math.max(0.15, 1 + (dx - dy) / 90);
+      object.size.x = roundStudioNumber(Math.max(0.2, original.size.x * factor));
+      object.size.y = roundStudioNumber(Math.max(0.2, original.size.y * factor));
+      object.size.z = roundStudioNumber(Math.max(0.2, original.size.z * factor));
+    } else {
+      object.size[axis] = roundStudioNumber(Math.max(0.2, Number(original.size?.[axis] || 1) + amount));
+      const side = studioEditor.transformSide || "center";
+      if (side !== "center") {
+        const direction = side === "positive" ? 1 : -1;
+        object.position[axis] = roundStudioNumber(Number(original.position?.[axis] || 0) + direction * (object.size[axis] - Number(original.size?.[axis] || 1)) / 2);
+      }
+    }
   }
   if (studioEditor.drag.tool === "rotate") {
     object.rotation = object.rotation || { x: 0, y: Number(object.rotationY || 0), z: 0 };
-    object.rotation.y = roundStudioNumber(Number(original.rotation?.y ?? original.rotationY ?? 0) + dx / 70);
-    object.rotation.x = roundStudioNumber(Number(original.rotation?.x || 0) + dy / 100);
+    const axis = studioEditor.transformAxis || "all";
+    if (axis === "all") {
+      object.rotation.y = roundStudioNumber(Number(original.rotation?.y ?? original.rotationY ?? 0) + dx / 70);
+      object.rotation.x = roundStudioNumber(Number(original.rotation?.x || 0) + dy / 100);
+    } else {
+      object.rotation[axis] = roundStudioNumber(Number(original.rotation?.[axis] || 0) + (dx - dy) / 90);
+    }
     object.rotationY = object.rotation.y;
   }
   studioEditor.drag.changed = true;
@@ -3101,6 +3172,17 @@ function roundStudioNumber(value) {
 function studioStatus(text) {
   const message = document.querySelector("#studioMessage");
   if (message) message.textContent = text;
+}
+
+function nudgeSelectedStudioObject(axis, amount) {
+  const object = selectedStudioObject();
+  if (!object) return studioStatus("Select an object first.");
+  if (object.locked) return studioStatus("Unlock the object before moving it.");
+  object.position = object.position || { x: 0, y: 0, z: 0 };
+  object.position[axis] = roundStudioNumber(Number(object.position[axis] || 0) + Number(amount || 0));
+  renderStudioEditor();
+  pushStudioHistory();
+  studioStatus(`${object.name} moved on ${axis.toUpperCase()}.`);
 }
 
 function cycleSelectedStudioMaterial() {
@@ -3228,17 +3310,20 @@ function deleteSelectedStudioObject() {
   studioStatus(`${object.name} deleted.`);
 }
 
-function scaleSelectedStudioSide(side) {
+function scaleSelectedStudioSide(side, amount = 0.5) {
   const object = selectedStudioObject();
   if (!object) return studioStatus("Select an object first.");
   if (object.locked) return studioStatus("Unlock the object before scaling.");
   const axis = side[0];
   const direction = side.endsWith("+") ? 1 : -1;
-  object.size[axis] = roundStudioNumber(Math.max(0.2, Number(object.size[axis] || 1) + 0.5));
-  object.position[axis] = roundStudioNumber(Math.max(axis === "y" ? 0 : -245, Math.min(245, Number(object.position[axis] || 0) + direction * 0.25)));
+  const oldSize = Number(object.size[axis] || 1);
+  const nextSize = roundStudioNumber(Math.max(0.2, oldSize + Number(amount || 0)));
+  const sizeDelta = nextSize - oldSize;
+  object.size[axis] = nextSize;
+  object.position[axis] = roundStudioNumber(Math.max(axis === "y" ? 0 : -245, Math.min(245, Number(object.position[axis] || 0) + direction * sizeDelta / 2)));
   renderStudioEditor();
   pushStudioHistory();
-  studioStatus(`${object.name} scaled on ${side.toUpperCase()} side.`);
+  studioStatus(`${object.name} ${amount < 0 ? "shrunk" : "grew"} on ${side.toUpperCase()} side.`);
 }
 
 function rotateSelectedStudioAxis(axis, step) {

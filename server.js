@@ -2331,7 +2331,7 @@ app.get("/health", (_req, res) => {
   res.json({
     ok: true,
     app: "CUBIXIA",
-    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.2.2",
+    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.2.3",
     twoStepSkipped: SKIP_TWO_STEP_FOR_NOW,
     mode: process.env.CUBIXIA_DESKTOP ? "desktop-local-server" : "shared-server",
     gmailReady: gmail.ready,
@@ -2347,7 +2347,7 @@ app.get("/health/email", async (_req, res) => {
   res.json({
     ok: true,
     app: "CUBIXIA",
-    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.2.2",
+    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.2.3",
     twoStepSkipped: SKIP_TWO_STEP_FOR_NOW,
     gmailReady: gmail.ready,
     gmailUserSet: gmail.userSet,
