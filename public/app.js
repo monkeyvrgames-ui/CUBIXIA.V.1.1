@@ -879,7 +879,7 @@ function signup(seedName = "") {
             <label class="file-btn">Upload picture<input id="avatarInput" type="file" accept="image/*" /></label>
           </div>
           <label class="input-row"><span>@</span><input name="username" value="${escapeHtml(seedName)}" autocomplete="username" placeholder="Username" required /></label>
-          <label class="input-row"><span>#</span><input name="email" type="email" autocomplete="email" placeholder="Gmail or email" required /></label>
+          <label class="input-row"><span>#</span><input name="email" type="email" autocomplete="email" placeholder="Gmail/email optional" /></label>
           <label class="input-row password-row"><span>*</span><input name="password" type="password" autocomplete="new-password" placeholder="Password" minlength="6" required /><button type="button" data-toggle-password>Show</button></label>
           <div class="date-row">
             <label class="input-row"><select name="birthMonth" required>${option("Month", ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"])}</select></label>
@@ -3600,23 +3600,31 @@ function renderSettingsTab(tab) {
   if (tab === "account") {
     main.innerHTML = `
       <h1>Account Info</h1>
-      <p><strong>Username:</strong> ${escapeHtml(currentUser.username)}</p>
-      <p><strong>Email:</strong> ${maskEmail(currentUser.email)} <span class="verified">Verified</span></p>
-      <p><strong>Role:</strong> ${escapeHtml((currentUser.role || "user").toUpperCase())}</p>
-      <p><strong>Cubbits:</strong> ${Number(currentUser.cubbux || 0).toLocaleString()}</p>
+      <form id="settingsForm" class="settings-switch-form">
+        <p><strong>Username:</strong> ${escapeHtml(currentUser.username)}</p>
+        <label class="settings-field">Gmail / email for recovery and 2-step
+          <input name="email" type="email" placeholder="Add Gmail/email later" value="${escapeHtml(currentUser.email || "")}" />
+        </label>
+        <p><strong>Role:</strong> ${escapeHtml((currentUser.role || "user").toUpperCase())}</p>
+        <p><strong>Cubbits:</strong> ${Number(currentUser.cubbux || 0).toLocaleString()}</p>
+        <button class="primary-btn">Save Account Info</button>
+        <div class="message" id="settingsMessage"></div>
+      </form>
     `;
+    document.querySelector("#settingsForm").addEventListener("submit", saveAccountSettings);
     return;
   }
   if (tab === "security") {
-    const twoStepOn = currentUser.twoStepEnabled !== false;
+    const twoStepOn = Boolean(currentUser.twoStepEnabled);
+    const hasEmail = String(currentUser.email || "").includes("@");
     main.innerHTML = `
       <h1>Security</h1>
       <section class="security-card">
         <div>
           <h2>2-Step Verification</h2>
-          <p>${twoStepOn ? "Every login now asks for a one-time code sent to" : "Turn this on to require a one-time code from"} ${maskEmail(currentUser.email)}.</p>
+          <p>${hasEmail ? (twoStepOn ? "Every login now asks for a one-time code sent to" : "Turn this on to require a one-time code from") + ` ${maskEmail(currentUser.email)}.` : "Add a Gmail/email in Account Info before turning on 2-step."}</p>
         </div>
-        <button class="${twoStepOn ? "ghost-btn" : "primary-btn"}" id="toggleTwoStep" type="button">${twoStepOn ? "Turn Off" : "Turn On"}</button>
+        <button class="${twoStepOn ? "ghost-btn" : "primary-btn"}" id="toggleTwoStep" type="button" ${!hasEmail && !twoStepOn ? "disabled" : ""}>${twoStepOn ? "Turn Off" : "Turn On"}</button>
       </section>
       <form id="passwordForm">
         <h2>Password</h2>
@@ -4853,7 +4861,7 @@ async function changePassword(event) {
 }
 
 async function toggleTwoStep() {
-  const nextEnabled = currentUser.twoStepEnabled === false;
+  const nextEnabled = !Boolean(currentUser.twoStepEnabled);
   const message = document.querySelector("#message");
   try {
     const data = await api("/api/settings/two-step", { method: "POST", body: JSON.stringify({ enabled: nextEnabled }) });
@@ -4871,6 +4879,10 @@ async function saveAccountSettings(event) {
   const payload = { notifications: {}, privacy: {}, browser: {} };
   const form = event.currentTarget;
   form.querySelectorAll("input, select").forEach((input) => {
+    if (input.name === "email") {
+      payload.email = input.value;
+      return;
+    }
     const [section, key] = input.name.split(".");
     if (!payload[section]) payload[section] = {};
     payload[section][key] = input.type === "checkbox" ? input.checked : input.type === "range" ? Number(input.value) : input.value;
@@ -4878,7 +4890,8 @@ async function saveAccountSettings(event) {
   const merged = {
     notifications: { friendRequests: true, messages: true, gameUpdates: true, moderation: true, ...(currentUser.settings?.notifications || {}), ...payload.notifications },
     privacy: { profileVisible: true, showOnline: true, allowFriendRequests: true, allowJoin: true, allowMessages: true, ...(currentUser.settings?.privacy || {}), ...payload.privacy },
-    browser: { reduceMotion: false, showPerformance: false, uiScale: 1, theme: "auto", ...(currentUser.settings?.browser || {}), ...payload.browser }
+    browser: { reduceMotion: false, showPerformance: false, uiScale: 1, theme: "auto", ...(currentUser.settings?.browser || {}), ...payload.browser },
+    email: payload.email
   };
   try {
     const data = await api("/api/settings/account", { method: "POST", body: JSON.stringify(merged) });

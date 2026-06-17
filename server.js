@@ -30,6 +30,7 @@ const AUTH_COOKIE = "cubixia_auth";
 const AUTH_REMEMBER_MS = 365 * 24 * 60 * 60 * 1000;
 const DEVICE_REMEMBER_MS = 2 * 365 * 24 * 60 * 60 * 1000;
 const SKIP_TWO_STEP_FOR_NOW = process.env.CUBIXIA_SKIP_TWO_STEP !== "false";
+const MAX_ACCOUNTS_PER_EMAIL = 5;
 let userWriteQueue = Promise.resolve();
 let chatWriteQueue = Promise.resolve();
 let reportWriteQueue = Promise.resolve();
@@ -849,7 +850,7 @@ function avatarStyleError(style) {
 function normalizeUser(user) {
   const ownerAccount = isOwnerName(user.username);
   const ownerAccess = ownerAccount || user.role === "cofounder";
-  const ownerEmailChanged = ownerAccount && String(user.email || "").toLowerCase() !== OWNER_EMAIL;
+  const cleanEmail = String(user.email || "").trim().toLowerCase();
   const ownerBadges = ownerAccount ? ["CREATOR/OWNER", "CUBIXIA"] : user.role === "cofounder" ? ["CO-FOUNDER", "CUBIXIA"] : [];
   const badges = Array.from(new Set([...(user.badges || ["Founder"]), ...ownerBadges]));
   const role = ownerAccount ? "owner" : ["cofounder", "admin", "mod"].includes(user.role) ? user.role : "user";
@@ -862,7 +863,7 @@ function normalizeUser(user) {
   return {
     ...user,
     username: ownerAccount ? "Tanklyplayz" : user.username,
-    email: ownerAccount ? OWNER_EMAIL : user.email,
+    email: cleanEmail || (ownerAccount ? OWNER_EMAIL : ""),
     avatar: user.avatar || "",
     avatarStyle: normalizeAvatarStyle(user.avatarStyle),
     inventory,
@@ -932,6 +933,8 @@ function normalizeUser(user) {
     ipBanRecords: Array.isArray(user.ipBanRecords) ? user.ipBanRecords : [],
     lastIpHash: user.lastIpHash || "",
     lastDeviceHash: user.lastDeviceHash || "",
+    createdIpHash: user.createdIpHash || user.registrationIpHash || user.lastIpHash || "",
+    createdDeviceHash: user.createdDeviceHash || user.registrationDeviceHash || user.lastDeviceHash || "",
     lastUserAgent: user.lastUserAgent || "",
     banReason: user.banReason || "",
     banUntil: Number(user.banUntil || 0),
@@ -942,12 +945,12 @@ function normalizeUser(user) {
     passwordResetCode: user.passwordResetCode || "",
     passwordResetExpires: user.passwordResetExpires || 0,
     twoStep: {
-      enabled: user.twoStep?.enabled !== false,
-      codeHash: ownerEmailChanged ? "" : user.twoStep?.codeHash || "",
-      codeExpires: ownerEmailChanged ? 0 : Number(user.twoStep?.codeExpires || 0),
-      attempts: ownerEmailChanged ? 0 : Number(user.twoStep?.attempts || 0),
-      requestedAt: ownerEmailChanged ? 0 : Number(user.twoStep?.requestedAt || 0),
-      lastSentAt: ownerEmailChanged ? 0 : Number(user.twoStep?.lastSentAt || 0),
+      enabled: Boolean(user.twoStep?.enabled),
+      codeHash: user.twoStep?.codeHash || "",
+      codeExpires: Number(user.twoStep?.codeExpires || 0),
+      attempts: Number(user.twoStep?.attempts || 0),
+      requestedAt: Number(user.twoStep?.requestedAt || 0),
+      lastSentAt: Number(user.twoStep?.lastSentAt || 0),
       verifiedAt: Number(user.twoStep?.verifiedAt || 0),
       rememberedDevices: activeRememberedDevices(user)
     },
@@ -1297,7 +1300,7 @@ function publicUser(user, users = []) {
     transactions: user.transactions || [],
     gameSettings: user.gameSettings,
     settings: user.settings,
-    twoStepEnabled: user.twoStep?.enabled !== false,
+    twoStepEnabled: Boolean(user.twoStep?.enabled),
     groups: user.groups || [],
     role: user.role || "user",
     moderationNotice: user.moderationNotice || null,
@@ -1526,6 +1529,18 @@ function stampRequestDevice(user, req) {
   user.lastUserAgent = requestUserAgent(req);
 }
 
+function stampRegistrationDevice(user, req) {
+  stampRequestDevice(user, req);
+  user.createdIpHash = user.createdIpHash || user.lastIpHash;
+  user.createdDeviceHash = user.createdDeviceHash || user.lastDeviceHash;
+}
+
+function canRecoverFromRequest(user, req) {
+  const createdIpHash = user.createdIpHash || user.registrationIpHash || user.lastIpHash || "";
+  const createdDeviceHash = user.createdDeviceHash || user.registrationDeviceHash || user.lastDeviceHash || "";
+  return Boolean(createdIpHash && createdDeviceHash && createdIpHash === requestIpHash(req) && createdDeviceHash === requestDeviceHash(req));
+}
+
 function isRememberDeviceRequested(value) {
   return value === true || value === "true" || value === "on" || value === "1";
 }
@@ -1742,8 +1757,8 @@ app.post("/api/register", async (req, res) => {
   if (!validateUsername(cleanName)) {
     return res.status(400).json({ error: "Username must be 3-18 letters, numbers, or underscores." });
   }
-  if (!cleanEmail.includes("@")) {
-    return res.status(400).json({ error: "Please enter a valid email address." });
+  if (cleanEmail && !cleanEmail.includes("@")) {
+    return res.status(400).json({ error: "Enter a valid Gmail/email, or leave it blank and add it later in Settings." });
   }
   if (!password || String(password).length < 6) {
     return res.status(400).json({ error: "Password must be at least 6 characters." });
@@ -1758,8 +1773,8 @@ app.post("/api/register", async (req, res) => {
   if (users.some((user) => user.username.toLowerCase() === cleanName.toLowerCase())) {
     return res.status(409).json({ error: "That username is already registered." });
   }
-  if (users.some((user) => user.email === cleanEmail)) {
-    return res.status(409).json({ error: "That email is already registered." });
+  if (cleanEmail && users.filter((user) => String(user.email || "").toLowerCase() === cleanEmail).length >= MAX_ACCOUNTS_PER_EMAIL) {
+    return res.status(409).json({ error: `That Gmail/email already has ${MAX_ACCOUNTS_PER_EMAIL} CUBIXIA accounts. Use another email or leave it blank.` });
   }
 
   const user = normalizeUser({
@@ -1772,9 +1787,10 @@ app.post("/api/register", async (req, res) => {
     birthYear,
     avatar: String(avatar || "").slice(0, 900000),
     createdAt: new Date().toISOString(),
-    online: true
+    online: true,
+    twoStep: { enabled: false }
   });
-  stampRequestDevice(user, req);
+  stampRegistrationDevice(user, req);
 
   users.push(user);
   rememberLogin(res, user);
@@ -1815,7 +1831,7 @@ app.post("/api/login", async (req, res) => {
   if (!passwordOk) {
     return res.status(401).json({ error: "Incorrect username or password." });
   }
-  if (user.twoStep?.enabled !== false && !shouldBypassTwoStep(user)) {
+  if (Boolean(user.twoStep?.enabled) && String(user.email || "").includes("@") && !shouldBypassTwoStep(user)) {
     if (hasValidRememberedDevice(req, user)) {
       user.online = true;
       user.lastOnline = new Date().toISOString();
@@ -1833,7 +1849,7 @@ app.post("/api/login", async (req, res) => {
   rememberLogin(res, user);
   await writeUsers(users);
   req.session.userId = user.id;
-  res.json({ user: publicUser(user, users), moderation: activeModeration(user), twoStepBypassed: user.twoStep?.enabled !== false && shouldBypassTwoStep(user) });
+  res.json({ user: publicUser(user, users), moderation: activeModeration(user), twoStepBypassed: Boolean(user.twoStep?.enabled) && shouldBypassTwoStep(user) });
 });
 
 app.post("/api/login/verify-2fa", async (req, res) => {
@@ -1897,10 +1913,16 @@ app.post("/api/login/resend-2fa", async (req, res) => {
 app.post("/api/recover/start", async (req, res) => {
   const identity = String(req.body.identity || "").trim().toLowerCase();
   const users = await readUsers();
-  const user = users.find((entry) => entry.email.toLowerCase() === identity || entry.username.toLowerCase() === identity);
+  const user = users.find((entry) => String(entry.email || "").toLowerCase() === identity || entry.username.toLowerCase() === identity);
 
   if (!user) {
     return res.status(404).json({ error: "No CUBIXIA account was found for that Gmail, email, or username." });
+  }
+  if (!String(user.email || "").includes("@")) {
+    return res.status(400).json({ error: "This account does not have a Gmail/email added yet. Log in with username/password, then add Gmail in Settings." });
+  }
+  if (!canRecoverFromRequest(user, req)) {
+    return res.status(403).json({ error: "Password recovery must be started from the same device and IP address used when the account was created." });
   }
 
   const code = String(Math.floor(100000 + Math.random() * 900000));
@@ -1923,9 +1945,12 @@ app.post("/api/recover/finish", async (req, res) => {
   const code = String(req.body.code || "").trim();
   const newPassword = String(req.body.newPassword || "");
   const users = await readUsers();
-  const user = users.find((entry) => entry.email.toLowerCase() === identity || entry.username.toLowerCase() === identity);
+  const user = users.find((entry) => String(entry.email || "").toLowerCase() === identity || entry.username.toLowerCase() === identity);
 
   if (!user) return res.status(404).json({ error: "No CUBIXIA account was found." });
+  if (!canRecoverFromRequest(user, req)) {
+    return res.status(403).json({ error: "Password recovery must be finished from the same device and IP address used when the account was created." });
+  }
   if (!code || code !== user.passwordResetCode || Date.now() > Number(user.passwordResetExpires || 0)) {
     return res.status(400).json({ error: "Recovery code is incorrect or expired." });
   }
@@ -2331,7 +2356,7 @@ app.get("/health", (_req, res) => {
   res.json({
     ok: true,
     app: "CUBIXIA",
-    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.2.3",
+    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.3.0",
     twoStepSkipped: SKIP_TWO_STEP_FOR_NOW,
     mode: process.env.CUBIXIA_DESKTOP ? "desktop-local-server" : "shared-server",
     gmailReady: gmail.ready,
@@ -2347,7 +2372,7 @@ app.get("/health/email", async (_req, res) => {
   res.json({
     ok: true,
     app: "CUBIXIA",
-    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.2.3",
+    version: process.env.CUBIXIA_DESKTOP_VERSION || "1.3.0",
     twoStepSkipped: SKIP_TWO_STEP_FOR_NOW,
     gmailReady: gmail.ready,
     gmailUserSet: gmail.userSet,
@@ -2611,6 +2636,18 @@ app.post("/api/settings/account", async (req, res) => {
   const users = await readUsers();
   const user = requireSessionUser(users, userId, res);
   if (!user) return;
+  const requestedEmail = String(req.body.email || user.email || "").trim().toLowerCase();
+  if (requestedEmail && !requestedEmail.includes("@")) {
+    return res.status(400).json({ error: "Enter a valid Gmail/email, or leave it blank." });
+  }
+  if (requestedEmail && requestedEmail !== String(user.email || "").toLowerCase()) {
+    const matchingEmailCount = users.filter((entry) => entry.id !== user.id && String(entry.email || "").toLowerCase() === requestedEmail).length;
+    if (matchingEmailCount >= MAX_ACCOUNTS_PER_EMAIL) {
+      return res.status(409).json({ error: `That Gmail/email already has ${MAX_ACCOUNTS_PER_EMAIL} CUBIXIA accounts.` });
+    }
+    user.email = requestedEmail;
+    user.twoStep = { ...(user.twoStep || {}), enabled: false, codeHash: "", codeExpires: 0, attempts: 0, rememberedDevices: [] };
+  }
   user.settings = {
     notifications: {
       friendRequests: Boolean(req.body.notifications?.friendRequests),
@@ -2665,6 +2702,9 @@ app.post("/api/settings/two-step", async (req, res) => {
   const user = requireSessionUser(users, userId, res);
   if (!user) return;
   const enabled = req.body.enabled !== false;
+  if (enabled && !String(user.email || "").includes("@")) {
+    return res.status(400).json({ error: "Add a Gmail/email in Account Info before turning on 2-Step Verification." });
+  }
   user.twoStep = {
     ...(user.twoStep || {}),
     enabled,
