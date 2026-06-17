@@ -535,6 +535,8 @@ function normalizeContentState(state = {}) {
     serverControls: state.serverControls && typeof state.serverControls === "object" ? state.serverControls : {},
     gameEvents: state.gameEvents && typeof state.gameEvents === "object" ? state.gameEvents : {},
     worldEvents: state.worldEvents && typeof state.worldEvents === "object" ? state.worldEvents : {},
+    wordMutes: state.wordMutes && typeof state.wordMutes === "object" ? state.wordMutes : {},
+    globalRestrictions: state.globalRestrictions && typeof state.globalRestrictions === "object" ? state.globalRestrictions : {},
     lockdown: {
       active: Boolean(state.lockdown?.active),
       reason: String(state.lockdown?.reason || "").slice(0, 500),
@@ -908,6 +910,15 @@ function normalizeUser(user) {
     outgoingRequests: user.outgoingRequests || [],
     notifications: user.notifications || [],
     following: Array.isArray(user.following) ? user.following : [],
+    staffNotes: Array.isArray(user.staffNotes) ? user.staffNotes : [],
+    strikes: Array.isArray(user.strikes) ? user.strikes : [],
+    restrictions: user.restrictions && typeof user.restrictions === "object" ? user.restrictions : {},
+    evidence: Array.isArray(user.evidence) ? user.evidence : [],
+    monitors: Array.isArray(user.monitors) ? user.monitors : [],
+    chatFlags: Array.isArray(user.chatFlags) ? user.chatFlags : [],
+    exploitFlags: Array.isArray(user.exploitFlags) ? user.exploitFlags : [],
+    caseFile: user.caseFile && typeof user.caseFile === "object" ? user.caseFile : null,
+    disabledFeatures: user.disabledFeatures && typeof user.disabledFeatures === "object" ? user.disabledFeatures : {},
     gameInteractions: user.gameInteractions && typeof user.gameInteractions === "object" ? user.gameInteractions : {},
     progression: {
       level: Math.max(1, Number(user.progression?.level || 1)),
@@ -1142,6 +1153,19 @@ function setModerationNotice(user, action, reason, moderator, until = 0) {
 function activeModeration(user) {
   const now = Date.now();
   const notice = user.moderationNotice && !user.moderationNotice.acknowledged ? user.moderationNotice : null;
+  const suspendedUntil = Number(user.suspendedUntil || 0);
+  if (suspendedUntil > now) {
+    return {
+      action: "suspend",
+      id: notice?.id || "",
+      title: "Account Suspended",
+      reason: user.suspendReason || notice?.reason || "Suspended by CUBIXIA moderation.",
+      moderator: notice?.moderator || "CUBIXIA",
+      until: suspendedUntil,
+      canAcknowledge: false,
+      remainingMs: Math.max(0, suspendedUntil - now)
+    };
+  }
   if (user.banned) {
     if (user.permanentBan) {
       return {
@@ -3065,7 +3089,7 @@ app.post("/api/world/:gameId/action", async (req, res) => {
 
 function splitCommand(text) {
   const raw = String(text || "").trim();
-  const match = raw.match(/^\/([a-zA-Z]+)(?:\s+([\s\S]*))?$/);
+  const match = raw.match(/^\/?([a-zA-Z]+)(?:\s+([\s\S]*))?$/);
   if (!match) return null;
   const args = String(match[2] || "").trim().split(/\s+/).filter(Boolean);
   return { name: match[1].toLowerCase(), args, rest: String(match[2] || "").trim() };
@@ -3116,17 +3140,45 @@ function ensureStaffNotes(user) {
   return user.staffNotes;
 }
 
+function ensureStaffArray(user, key) {
+  if (!Array.isArray(user[key])) user[key] = [];
+  return user[key];
+}
+
+function ensureStaffMap(user, key) {
+  if (!user[key] || typeof user[key] !== "object" || Array.isArray(user[key])) user[key] = {};
+  return user[key];
+}
+
+function staffRecord(actor, text, extra = {}) {
+  return {
+    id: crypto.randomUUID(),
+    by: actor.username,
+    text: String(text || "").slice(0, 500),
+    createdAt: new Date().toISOString(),
+    ...extra
+  };
+}
+
+function featureKey(value) {
+  return String(value || "").trim().toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 40);
+}
+
 function commandRequiresAdmin(name) {
   return new Set([
     "shadowmute", "forceleave", "clearwarnings", "casefile", "restartserver", "shutdownserver", "lockserver",
     "unlockserver", "moveserver", "serverinfo", "startevent", "stopevent", "globalemote", "spawnnpc",
     "spawnitem", "inventory", "equipment", "movementlog", "chatlog", "sessioninfo", "reviewstaff",
-    "flagstaff", "approvecase", "giantmode", "tiny", "normalsize", "firework", "spotlight", "freezeall", "unfreezeall", "fly", "unfly", "noclip", "clip"
+    "flagstaff", "approvecase", "giantmode", "tiny", "normalsize", "firework", "spotlight", "freezeall", "unfreezeall", "fly", "unfly", "noclip", "clip",
+    "deviceban", "altban", "shadowmute", "chatshadow", "restartserver", "shutdownserver"
   ]).has(name);
 }
 
 function commandRequiresOwner(name) {
-  return new Set(["lockdown", "unlockdown"]).has(name);
+  return new Set([
+    "lockdown", "unlockdown", "wipeplayer", "wipeinventory", "wipechat", "wipecases",
+    "wipewarnings", "wipeeverything", "globalrestrict", "globalunrestrict"
+  ]).has(name);
 }
 
 async function appendRoomMessage(room, message) {
@@ -3136,12 +3188,330 @@ async function appendRoomMessage(room, message) {
   return messages.filter((entry) => entry.room === room).slice(-40);
 }
 
+async function handleExtendedModerationCommand({ parsed, users, actor, state, room, gameId, now, req }) {
+  const targetFor = (name, allowSelf = false) => {
+    const user = commandTarget(users, name);
+    if (!user) throw Object.assign(new Error("No user was found for that command."), { status: 404 });
+    if (!allowSelf && user.id === actor.id) throw Object.assign(new Error("You cannot use that command on yourself."), { status: 400 });
+    if (hasOwnerAccess(user) && !isOwnerName(actor.username)) throw Object.assign(new Error("Only Tanklyplayz can act on owner-level accounts."), { status: 403 });
+    return user;
+  };
+  const textFrom = (index, fallback = "CUBIXIA staff action.") => parsed.args.slice(index).join(" ").slice(0, 500) || fallback;
+  const compact = (value, fallback = "") => String(value || fallback).trim().slice(0, 240);
+  const saveState = async () => writeContentState(state);
+  const simpleDetails = (title, sections) => ({ title, sections: sections.map(([label, value]) => ({ label, value: String(value || "None").slice(0, 1200) })) });
+
+  if (parsed.name === "suspend") {
+    const user = targetFor(parsed.args[0]);
+    const duration = durationFromToken(parsed.args[1], 24 * 60 * 60 * 1000);
+    const reason = textFrom(2, "Suspended by CUBIXIA staff.");
+    user.suspendedUntil = duration.permanent ? now + 10 * 365 * 24 * 60 * 60 * 1000 : now + duration.ms;
+    user.suspendReason = reason;
+    user.currentGame = "";
+    user.worldState = null;
+    setModerationNotice(user, "suspend", reason, actor, user.suspendedUntil);
+    return { message: `Suspended ${user.username} for ${duration.label}.` };
+  }
+  if (parsed.name === "unsuspend") {
+    const user = targetFor(parsed.args[0]);
+    user.suspendedUntil = 0;
+    user.suspendReason = "";
+    if (user.moderationNotice?.action === "suspend") user.moderationNotice = null;
+    return { message: `${user.username} is no longer suspended.` };
+  }
+  if (parsed.name === "probation") {
+    const user = targetFor(parsed.args[0]);
+    const duration = durationFromToken(parsed.args[1], 7 * 24 * 60 * 60 * 1000);
+    const reason = textFrom(2, "Placed on probation by CUBIXIA staff.");
+    user.probationUntil = duration.permanent ? now + 10 * 365 * 24 * 60 * 60 * 1000 : now + duration.ms;
+    user.probationReason = reason;
+    ensureStaffNotes(user).unshift(staffRecord(actor, `Probation ${duration.label}: ${reason}`, { type: "probation", until: user.probationUntil }));
+    return { message: `${user.username} is on probation for ${duration.label}.` };
+  }
+  if (parsed.name === "strike") {
+    const user = targetFor(parsed.args[0]);
+    const reason = textFrom(1, "Strike issued by CUBIXIA staff.");
+    ensureStaffArray(user, "strikes").unshift(staffRecord(actor, reason, { type: "strike" }));
+    user.strikes = user.strikes.slice(0, 50);
+    return { message: `Strike added to ${user.username}. Total strikes: ${user.strikes.length}.` };
+  }
+  if (parsed.name === "strikes") {
+    const user = targetFor(parsed.args[0], true);
+    const list = ensureStaffArray(user, "strikes").slice(0, 10);
+    return {
+      message: `${user.username} has ${user.strikes.length} strike${user.strikes.length === 1 ? "" : "s"}.`,
+      details: simpleDetails(`Strikes | ${user.username}`, list.length ? list.map((entry) => [entry.id.slice(0, 8), `${entry.by}: ${entry.text}`]) : [["Strikes", "No strikes."]])
+    };
+  }
+  if (parsed.name === "clearstrikes") {
+    const user = targetFor(parsed.args[0]);
+    user.strikes = [];
+    return { message: `Cleared all strikes for ${user.username}.` };
+  }
+  if (parsed.name === "restrict" || parsed.name === "unrestrict") {
+    const user = targetFor(parsed.args[0]);
+    const feature = featureKey(parsed.args[1]);
+    if (!feature) throw Object.assign(new Error("Type the feature to restrict."), { status: 400 });
+    const restrictions = ensureStaffMap(user, "restrictions");
+    if (parsed.name === "restrict") {
+      restrictions[feature] = { reason: textFrom(2, "Restricted by CUBIXIA staff."), by: actor.username, createdAt: new Date().toISOString() };
+      return { message: `${user.username} is restricted from ${feature}.` };
+    }
+    delete restrictions[feature];
+    return { message: `${user.username} is no longer restricted from ${feature}.` };
+  }
+
+  if (parsed.name === "evidence") {
+    const action = String(parsed.args[0] || "").toLowerCase();
+    const user = targetFor(parsed.args[1], true);
+    const evidence = ensureStaffArray(user, "evidence");
+    if (action === "add" || action === "attach") {
+      const text = textFrom(2, action === "attach" ? "Attached evidence link." : "Added evidence.");
+      evidence.unshift(staffRecord(actor, text, { type: action === "attach" ? "link" : "text" }));
+      user.evidence = evidence.slice(0, 100);
+      return { message: `${action === "attach" ? "Attached" : "Added"} evidence for ${user.username}.` };
+    }
+    if (action === "list") {
+      return {
+        message: `${user.username} has ${evidence.length} evidence record${evidence.length === 1 ? "" : "s"}.`,
+        details: simpleDetails(`Evidence | ${user.username}`, evidence.slice(0, 12).map((entry) => [entry.id.slice(0, 8), `${entry.type || "text"} | ${entry.by}: ${entry.text}`]))
+      };
+    }
+    if (action === "delete") {
+      const id = String(parsed.args[2] || "");
+      const before = evidence.length;
+      user.evidence = evidence.filter((entry) => entry.id !== id && !entry.id?.startsWith(id));
+      return { message: before === user.evidence.length ? "No evidence matched that ID." : `Deleted evidence ${id}.` };
+    }
+    throw Object.assign(new Error("Use evidence add/list/attach/delete."), { status: 400 });
+  }
+
+  if (parsed.name === "monitor" || parsed.name === "monitorstop") {
+    const user = targetFor(parsed.args[0]);
+    if (parsed.name === "monitorstop") {
+      user.monitorUntil = 0;
+      ensureStaffArray(user, "monitors").unshift(staffRecord(actor, "Monitoring stopped.", { type: "monitor_stop" }));
+      return { message: `Stopped monitoring ${user.username}.` };
+    }
+    const duration = durationFromToken(parsed.args[1], 30 * 60 * 1000);
+    user.monitorUntil = duration.permanent ? now + 10 * 365 * 24 * 60 * 60 * 1000 : now + duration.ms;
+    ensureStaffArray(user, "monitors").unshift(staffRecord(actor, `Monitor for ${duration.label}.`, { type: "monitor", until: user.monitorUntil }));
+    return { message: `${user.username} is being monitored for ${duration.label}.` };
+  }
+
+  if (parsed.name === "sessionlog") {
+    const exportMode = String(parsed.args[0] || "").toLowerCase() === "export";
+    const user = targetFor(exportMode ? parsed.args[1] : parsed.args[0], true);
+    const rows = [
+      ["Account", `${user.username} | role ${user.role || "user"} | created ${user.createdAt || "unknown"}`],
+      ["Session", `online ${Boolean(user.online)} | last ${user.lastOnline || "unknown"} | game ${user.currentGame || "none"}`],
+      ["World", JSON.stringify(user.worldState || {})],
+      ["Moderation", `banned ${Boolean(user.banned)} | timeout ${Number(user.timeoutUntil || 0)} | probation ${Number(user.probationUntil || 0)}`],
+      ["Device", `ip ${String(user.lastIpHash || "").slice(0, 12)}... | device ${String(user.lastDeviceHash || "").slice(0, 12)}...`]
+    ];
+    return { message: exportMode ? `Session log export prepared for ${user.username}.` : `Opened session log for ${user.username}.`, details: simpleDetails(`Session Log | ${user.username}`, rows) };
+  }
+
+  if (parsed.name === "wordmute" || parsed.name === "wordunmute") {
+    const word = compact(parsed.args[0]).toLowerCase();
+    if (!word) throw Object.assign(new Error("Type the word to mute."), { status: 400 });
+    state.wordMutes = state.wordMutes && typeof state.wordMutes === "object" ? state.wordMutes : {};
+    if (parsed.name === "wordunmute") {
+      delete state.wordMutes[word];
+      await saveState();
+      return { message: `Word mute removed for "${word}".` };
+    }
+    const duration = durationFromToken(parsed.args[1], 60 * 60 * 1000);
+    state.wordMutes[word] = { until: duration.permanent ? 0 : now + duration.ms, permanent: duration.permanent, by: actor.username, createdAt: new Date().toISOString() };
+    await saveState();
+    return { message: `Word "${word}" muted for ${duration.label}.` };
+  }
+
+  if (parsed.name === "chatflag" || parsed.name === "chatreview" || parsed.name === "chatshadow" || parsed.name === "chatdelete") {
+    if (parsed.name === "chatdelete") {
+      const id = String(parsed.args[0] || "");
+      const messages = await readChat();
+      const entry = messages.find((message) => message.id === id || message.id?.startsWith(id));
+      if (!entry) throw Object.assign(new Error("Chat message was not found."), { status: 404 });
+      entry.deleted = true;
+      entry.text = "[Message deleted by CUBIXIA staff]";
+      entry.deletedBy = actor.username;
+      entry.deletedAt = new Date().toISOString();
+      await writeChat(messages);
+      return { message: `Deleted chat message ${entry.id.slice(0, 8)}.` };
+    }
+    const user = targetFor(parsed.args[0], parsed.name === "chatreview");
+    if (parsed.name === "chatshadow") {
+      const duration = durationFromToken(parsed.args[1], 30 * 60 * 1000);
+      user.chatMutedUntil = duration.permanent ? now + 10 * 365 * 24 * 60 * 60 * 1000 : now + duration.ms;
+      user.chatMuteReason = textFrom(2, "Shadow muted by CUBIXIA staff.");
+      user.shadowMuted = true;
+      return { message: `${user.username} was chat-shadowed for ${duration.label}.` };
+    }
+    if (parsed.name === "chatflag") {
+      ensureStaffArray(user, "chatFlags").unshift(staffRecord(actor, textFrom(1, "Chat flagged for review."), { type: "chatflag" }));
+      return { message: `Chat flag added to ${user.username}.` };
+    }
+    const messages = (await readChat()).filter((entry) => entry.username?.toLowerCase() === user.username.toLowerCase()).slice(-12);
+    return { message: `Opened chat review for ${user.username}.`, details: simpleDetails(`Chat Review | ${user.username}`, messages.map((entry) => [entry.id.slice(0, 8), `${entry.room}: ${entry.text}`])) };
+  }
+
+  const disableMap = { disabletrading: "trading", disablemarket: "market", disablebuilding: "building", disablevoice: "voice" };
+  if (disableMap[parsed.name]) {
+    const user = targetFor(parsed.args[0]);
+    const duration = durationFromToken(parsed.args[1], 60 * 60 * 1000);
+    ensureStaffMap(user, "disabledFeatures")[disableMap[parsed.name]] = { until: duration.permanent ? 0 : now + duration.ms, permanent: duration.permanent, by: actor.username, createdAt: new Date().toISOString() };
+    return { message: `${disableMap[parsed.name]} disabled for ${user.username} for ${duration.label}.` };
+  }
+  if (parsed.name === "resetavatar" || parsed.name === "resetsettings") {
+    const user = targetFor(parsed.args[0]);
+    if (parsed.name === "resetavatar") {
+      user.avatar = "";
+      user.avatarStyle = normalizeAvatarStyle({});
+      user.equipped = ["starter-shirt", "cube-cap"].filter((item) => (user.inventory || []).includes(item));
+      return { message: `${user.username}'s avatar was reset.` };
+    }
+    user.settings = normalizeUser({ ...user, settings: {} }).settings;
+    user.gameSettings = normalizeUser({ ...user, gameSettings: {} }).gameSettings;
+    return { message: `${user.username}'s settings were reset.` };
+  }
+
+  if (["assignreport", "unassignreport", "reportstatus", "reportcomment"].includes(parsed.name)) {
+    const reports = await readReports();
+    const report = reports.find((entry) => entry.id === parsed.args[0] || entry.id?.startsWith(parsed.args[0] || ""));
+    if (!report) throw Object.assign(new Error("Report was not found."), { status: 404 });
+    if (parsed.name === "assignreport") {
+      const staff = targetFor(parsed.args[1], true);
+      if (!canModerate(staff)) throw Object.assign(new Error("That user is not staff."), { status: 400 });
+      report.assignedTo = staff.username;
+      report.status = "assigned";
+    } else if (parsed.name === "unassignreport") {
+      report.assignedTo = "";
+      report.status = "open";
+    } else if (parsed.name === "reportstatus") {
+      report.status = compact(parsed.args[1], "open");
+    } else {
+      report.comments = [...(report.comments || []), staffRecord(actor, textFrom(1, "Report comment."))];
+    }
+    report.updatedBy = actor.username;
+    report.updatedAt = new Date().toISOString();
+    await writeReports(reports);
+    return { message: `Report ${report.id.slice(0, 8)} updated: ${report.status || "open"}.` };
+  }
+  if (parsed.name === "reporthistory") {
+    const user = targetFor(parsed.args[0], true);
+    const reports = (await readReports()).filter((entry) => [entry.target, entry.reporter].some((name) => String(name || "").toLowerCase() === user.username.toLowerCase())).slice(0, 12);
+    return { message: `Found ${reports.length} report record${reports.length === 1 ? "" : "s"} for ${user.username}.`, details: simpleDetails(`Report History | ${user.username}`, reports.map((entry) => [entry.id.slice(0, 8), `${entry.status || "open"} | ${entry.abuseType}: ${entry.details}`])) };
+  }
+
+  if (parsed.name === "flagexploit" || parsed.name === "unflagexploit" || parsed.name === "devicecheck" || parsed.name === "alts" || parsed.name === "deviceban" || parsed.name === "altban") {
+    const user = targetFor(parsed.args[0], true);
+    if (parsed.name === "flagexploit") {
+      ensureStaffArray(user, "exploitFlags").unshift(staffRecord(actor, compact(parsed.args[1], "suspicious"), { type: "exploit" }));
+      return { message: `Exploit flag added to ${user.username}.` };
+    }
+    if (parsed.name === "unflagexploit") {
+      user.exploitFlags = [];
+      return { message: `Exploit flags cleared for ${user.username}.` };
+    }
+    if (parsed.name === "devicecheck") {
+      return { message: `Device check opened for ${user.username}.`, details: simpleDetails(`Device Check | ${user.username}`, [["IP hash", String(user.lastIpHash || "none").slice(0, 18)], ["Device hash", String(user.lastDeviceHash || "none").slice(0, 18)], ["User agent", user.lastUserAgent || "unknown"]]) };
+    }
+    if (parsed.name === "alts") {
+      const matches = users.filter((entry) => entry.id !== user.id && ((user.lastDeviceHash && entry.lastDeviceHash === user.lastDeviceHash) || (user.lastIpHash && entry.lastIpHash === user.lastIpHash)));
+      return { message: matches.length ? `Possible alts for ${user.username}: ${matches.map((entry) => entry.username).join(", ")}.` : `No matching alts found for ${user.username}.` };
+    }
+    const reason = textFrom(1, parsed.name === "altban" ? "Alt/device ban by CUBIXIA admin." : "Device ban by CUBIXIA admin.");
+    const targets = parsed.name === "altban" ? users.filter((entry) => !hasOwnerAccess(entry) && ((user.lastDeviceHash && entry.lastDeviceHash === user.lastDeviceHash) || (user.lastIpHash && entry.lastIpHash === user.lastIpHash))) : [user];
+    targets.forEach((entry) => {
+      entry.banned = true;
+      entry.permanentBan = true;
+      entry.banReason = reason;
+      entry.banUntil = 0;
+      entry.currentGame = "";
+      entry.worldState = null;
+      applyIpBan(entry, actor, reason, 0, req);
+      setModerationNotice(entry, "ipban", reason, actor, 0);
+    });
+    return { message: `${parsed.name === "altban" ? "Alt banned" : "Device banned"} ${targets.length} account${targets.length === 1 ? "" : "s"}.` };
+  }
+
+  if (["caseopen", "caseassign", "casenote", "caseclose", "caseexport"].includes(parsed.name)) {
+    const user = targetFor(parsed.args[0], true);
+    if (!user.caseFile || typeof user.caseFile !== "object") user.caseFile = { id: crypto.randomUUID(), status: "open", notes: [], openedBy: actor.username, openedAt: new Date().toISOString() };
+    if (parsed.name === "caseassign") {
+      const staff = targetFor(parsed.args[1], true);
+      if (!canModerate(staff)) throw Object.assign(new Error("That user is not staff."), { status: 400 });
+      user.caseFile.assignedTo = staff.username;
+    } else if (parsed.name === "casenote") {
+      user.caseFile.notes = [...(user.caseFile.notes || []), staffRecord(actor, textFrom(1, "Case note."))].slice(-100);
+    } else if (parsed.name === "caseclose") {
+      user.caseFile.status = "closed";
+      user.caseFile.resolution = textFrom(1, "Case closed.");
+      user.caseFile.closedBy = actor.username;
+      user.caseFile.closedAt = new Date().toISOString();
+    }
+    const rows = [["Status", user.caseFile.status], ["Assigned", user.caseFile.assignedTo || "Unassigned"], ["Resolution", user.caseFile.resolution || "Open"], ["Notes", (user.caseFile.notes || []).map((note) => `${note.by}: ${note.text}`).join(" | ")]];
+    return { message: `${parsed.name} completed for ${user.username}.`, details: simpleDetails(`Case File | ${user.username}`, rows) };
+  }
+
+  if (["wipeplayer", "wipeinventory", "wipechat", "wipecases", "wipewarnings", "wipeeverything"].includes(parsed.name)) {
+    const user = targetFor(parsed.args[0]);
+    if (["wipeplayer", "wipeeverything"].includes(parsed.name)) {
+      user.bio = "";
+      user.status = "";
+      user.currentGame = "";
+      user.worldState = null;
+      user.friends = [];
+      user.incomingRequests = [];
+      user.outgoingRequests = [];
+      user.notifications = [];
+    }
+    if (["wipeinventory", "wipeeverything"].includes(parsed.name)) {
+      user.inventory = STARTER_ITEM_IDS;
+      user.equipped = ["starter-shirt", "cube-cap"];
+    }
+    if (["wipecases", "wipeeverything"].includes(parsed.name)) {
+      user.caseFile = null;
+      user.evidence = [];
+      user.staffNotes = [];
+      user.chatFlags = [];
+      user.exploitFlags = [];
+      user.monitors = [];
+      user.strikes = [];
+    }
+    if (["wipewarnings", "wipeeverything"].includes(parsed.name)) {
+      user.moderationNotice = null;
+      user.timeoutUntil = 0;
+      user.timeoutReason = "";
+      user.probationUntil = 0;
+      user.probationReason = "";
+    }
+    if (["wipechat", "wipeeverything"].includes(parsed.name)) {
+      const messages = await readChat();
+      await writeChat(messages.filter((entry) => entry.username?.toLowerCase() !== user.username.toLowerCase()));
+    }
+    return { message: `${parsed.name} completed for ${user.username}.` };
+  }
+  if (parsed.name === "globalrestrict" || parsed.name === "globalunrestrict") {
+    const feature = featureKey(parsed.args[0]);
+    if (!feature) throw Object.assign(new Error("Type the global feature to restrict."), { status: 400 });
+    state.globalRestrictions = state.globalRestrictions && typeof state.globalRestrictions === "object" ? state.globalRestrictions : {};
+    if (parsed.name === "globalrestrict") state.globalRestrictions[feature] = { reason: textFrom(1, "Globally restricted by CUBIXIA owner."), by: actor.username, createdAt: new Date().toISOString() };
+    else delete state.globalRestrictions[feature];
+    await saveState();
+    return { message: parsed.name === "globalrestrict" ? `Global restriction enabled for ${feature}.` : `Global restriction removed for ${feature}.` };
+  }
+
+  return null;
+}
+
 app.post("/api/game-command", async (req, res) => {
   const userId = await requireSessionOrRemembered(req, res);
   if (!userId) return;
 
   const parsed = splitCommand(req.body.text || req.body.command);
-  if (!parsed) return res.status(400).json({ error: "Commands must start with /." });
+  if (!parsed) return res.status(400).json({ error: "Command was not recognized." });
   const gameId = String(req.body.gameId || "").slice(0, 80);
   const room = `game:${gameId || "global"}`;
 
@@ -3175,7 +3545,12 @@ app.post("/api/game-command", async (req, res) => {
   };
 
   try {
-    if (parsed.name === "warn") {
+    const extended = await handleExtendedModerationCommand({ parsed, users, actor, state, room, gameId, now, req });
+    if (extended) {
+      message = extended.message || "";
+      publicMessage = extended.publicMessage || "";
+      details = extended.details || null;
+    } else if (parsed.name === "warn") {
       const user = requireTarget();
       const reason = reasonFrom(1, "CUBIXIA warning.");
       setModerationNotice(user, "warning", reason, actor, 0);
@@ -3537,6 +3912,14 @@ app.post("/api/chat", async (req, res) => {
   }
   const originalText = String(req.body.text || "").slice(0, 180);
   if (!originalText.trim()) return res.status(400).json({ error: "Message cannot be empty." });
+  const activeWordMute = Object.entries(state.wordMutes || {}).find(([word, record]) => {
+    const until = Number(record?.until || 0);
+    const active = record?.permanent || !until || until > Date.now();
+    return active && word && originalText.toLowerCase().includes(String(word).toLowerCase());
+  });
+  if (activeWordMute && !canModerate(user)) {
+    return res.status(423).json({ error: "That word is temporarily muted by CUBIXIA moderation." });
+  }
   const filtered = filterChatText(originalText);
   const text = filtered.cleanText;
   if (filtered.flaggedTerms.length) notifyStaffChatFlag(users, user, room, originalText, text, filtered.severe);
