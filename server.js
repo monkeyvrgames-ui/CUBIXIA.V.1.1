@@ -3164,6 +3164,21 @@ function featureKey(value) {
   return String(value || "").trim().toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 40);
 }
 
+const STAFF_COMMAND_HELP = [
+  ["Core", "/warn player reason | /kick player reason | /ban player duration reason | /unban player | /mute player duration reason"],
+  ["Core+", "/suspend player duration reason | /unsuspend player | /probation player duration reason | /strike player reason | /strikes player | /clearstrikes player"],
+  ["Restrictions", "/restrict player feature reason | /unrestrict player feature | /disabletrading player duration | /disablemarket player duration | /disablebuilding player duration | /disablevoice player duration"],
+  ["Investigation", "/note player text | /freeze player | /unfreeze player | /inspect player | /goto player | /bring player | /safezone player | /monitor player duration | /monitorstop player | /sessionlog player"],
+  ["Evidence", "/evidence add player text | /evidence attach player link | /evidence list player | /evidence delete player evidenceID"],
+  ["Chat", "/clearchat amount | /slowmode seconds | /lockchat | /unlockchat | /announce message | /wordmute word duration | /wordunmute word | /chatflag player reason | /chatreview player | /chatdelete messageID | /chatshadow player duration"],
+  ["Reports", "/reviewreports | /resolve reportID | /escalate reportID | /assignreport reportID staff | /unassignreport reportID | /reportstatus reportID status | /reportcomment reportID text | /reporthistory player"],
+  ["Anti-Exploit", "/flagexploit player type | /unflagexploit player | /deviceban player reason | /devicecheck player | /alts player | /altban player reason"],
+  ["Case Files", "/caseopen player | /caseassign player staff | /casenote player text | /caseclose player resolution | /caseexport player | /casefile player"],
+  ["Admin", "/forceleave player reason | /clearwarnings player | /restartserver reason | /shutdownserver reason | /lockserver | /unlockserver | /moveserver player serverID | /serverinfo"],
+  ["Admin Fun", "/startevent type | /stopevent | /globalemote emote | /spawnnpc npc | /spawnitem item | /giantmode | /tiny | /normalsize | /firework | /spotlight | /freezeall | /unfreezeall | /fly | /unfly | /noclip | /clip"],
+  ["Owner", "/lockdown reason | /unlockdown | /wipeplayer player | /wipeinventory player | /wipechat player | /wipecases player | /wipewarnings player | /wipeeverything player | /globalrestrict feature reason | /globalunrestrict feature"]
+];
+
 function commandRequiresAdmin(name) {
   return new Set([
     "shadowmute", "forceleave", "clearwarnings", "casefile", "restartserver", "shutdownserver", "lockserver",
@@ -3545,6 +3560,13 @@ app.post("/api/game-command", async (req, res) => {
   };
 
   try {
+    if (parsed.name === "commands" || parsed.name === "help") {
+      message = "Opened the full CUBIXIA staff command list.";
+      details = {
+        title: "CUBIXIA In-Game Staff Commands",
+        sections: STAFF_COMMAND_HELP.map(([label, value]) => ({ label, value: `${value}\n\nSlash is optional. Example: /freeze Tanklyplayz or freeze Tanklyplayz.` }))
+      };
+    } else {
     const extended = await handleExtendedModerationCommand({ parsed, users, actor, state, room, gameId, now, req });
     if (extended) {
       message = extended.message || "";
@@ -3778,6 +3800,7 @@ app.post("/api/game-command", async (req, res) => {
       message = "Owner lockdown ended.";
     } else {
       return res.status(400).json({ error: `Unknown staff command: /${parsed.name}` });
+    }
     }
   } catch (error) {
     return res.status(error.status || 400).json({ error: error.message || "Command failed." });

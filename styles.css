@@ -7941,6 +7941,27 @@ function toggleGameMenu(show) {
   document.querySelector("#escMenu")?.classList.toggle("hidden", !show);
 }
 
+const STAFF_GAME_COMMANDS = new Set([
+  "commands", "help",
+  "note", "freeze", "unfreeze", "inspect", "goto", "bring", "safezone", "clearchat", "slowmode", "lockchat", "unlockchat",
+  "announce", "reviewreports", "resolve", "escalate", "attachnote", "ban", "unban", "warn", "kick", "timeout",
+  "shadowmute", "forceleave", "clearwarnings", "casefile", "restartserver", "shutdownserver", "lockserver", "unlockserver",
+  "moveserver", "serverinfo", "startevent", "stopevent", "globalemote", "spawnnpc", "spawnitem", "inventory", "equipment",
+  "movementlog", "chatlog", "sessioninfo", "reviewstaff", "flagstaff", "approvecase", "giantmode", "tiny", "normalsize",
+  "firework", "spotlight", "freezeall", "unfreezeall", "fly", "unfly", "noclip", "clip", "lockdown", "unlockdown",
+  "suspend", "unsuspend", "probation", "strike", "strikes", "clearstrikes", "restrict", "unrestrict",
+  "evidence", "monitor", "monitorstop", "sessionlog", "wordmute", "wordunmute", "chatflag", "chatreview", "chatdelete",
+  "chatshadow", "disabletrading", "disablemarket", "disablebuilding", "disablevoice", "resetavatar", "resetsettings",
+  "assignreport", "unassignreport", "reportstatus", "reportcomment", "reporthistory", "flagexploit", "unflagexploit",
+  "deviceban", "devicecheck", "alts", "altban", "caseopen", "caseassign", "casenote", "caseclose", "caseexport",
+  "wipeplayer", "wipeinventory", "wipechat", "wipecases", "wipewarnings", "wipeeverything", "globalrestrict", "globalunrestrict"
+]);
+
+function isStaffGameCommandText(text) {
+  const firstWord = String(text || "").trim().replace(/^\/+/, "").split(/\s+/)[0]?.toLowerCase();
+  return STAFF_GAME_COMMANDS.has(firstWord);
+}
+
 function setupGameChat(base, user, gameId) {
   const panel = document.querySelector("#gameChat");
   const list = document.querySelector("#gameChatMessages");
@@ -7976,7 +7997,7 @@ function setupGameChat(base, user, gameId) {
     const text = input.value.trim();
     if (!text) return;
     try {
-      if (text.startsWith("/")) {
+      if (isStaffGameCommandText(text)) {
         const data = await api("/api/game-command", { method: "POST", body: JSON.stringify({ gameId, text }) });
         input.value = "";
         renderMessages(data.messages || base.chatMessages || []);
